@@ -1,0 +1,263 @@
+---
+title: "621 Homework 1"
+author: "Alec"
+date: "9/18/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Libraries
+
+```{r include=FALSE}
+library(dplyr)
+library(tidyverse)
+library(GGally)
+library(MASS)
+```
+
+
+## Load Data
+
+```{r results=FALSE, message=FALSE}
+data <- read_csv("moneyball-training-data.csv")
+```
+
+## Part 1 - Data Exploration
+
+```{r}
+# There are 2276 observations, with 16 features and 1 target variable
+
+dim(data)
+```
+
+There are 2276 observations, with 16 features and 1 target variable
+
+```{r}
+# All fields are of type double.
+head(data)
+```
+
+
+```{r}
+summary(data)
+```
+
+
+### Check for Missing Values
+
+```{r}
+sapply(data, function(x) sum(is.na(x))/dim(data)[1])
+```
+
+In total there are 6 columns with missing values:
+- Strikeouts by batters (5%) bat_so
+- Stolen bases (6%) bas_sb
+- Caught stealing (34%) bas_cs
+- Batter hit by pitch (92%)
+- Strikeouts by pitchers (4%)
+- Double plays (12%)
+
+
+bat_so
+bas_sb
+bas_cs
+bat_hbp
+bat_h
+p_h
+p_bb
+p_so
+f_e
+f_dp
+
+We will impute these columns using each's respective median value. We will discard "Batter hit by pitch" due to 92% of entries missing.
+
+
+```{r}
+data$TEAM_BATTING_SO[is.na(data$TEAM_BATTING_SO)] <- median(data$TEAM_BATTING_SO, na.rm = T)
+data$TEAM_BASERUN_SB[is.na(data$TEAM_BASERUN_SB)] <- median(data$TEAM_BASERUN_SB, na.rm = T)
+data$TEAM_BASERUN_CS[is.na(data$TEAM_BASERUN_CS)] <- median(data$TEAM_BASERUN_CS, na.rm = T)
+data$TEAM_PITCHING_SO[is.na(data$TEAM_PITCHING_SO)] <- median(data$TEAM_PITCHING_SO, na.rm = T)
+data$TEAM_FIELDING_DP[is.na(data$TEAM_FIELDING_DP)] <- median(data$TEAM_FIELDING_DP, na.rm = T)
+```
+
+
+```{r}
+# remove unused columns
+
+data <- data %>% dplyr::select(!c("INDEX", "TEAM_BATTING_HBP"))
+```
+
+
+
+```{r}
+# check final results after imputation
+
+sapply(data, function(x) sum(is.na(x))/dim(data)[1])
+```
+
+Rename the columns for easier reading
+
+```{r}
+new_cols <- c("target", "bat_h", "bat_2b", "bat_3b", "bat_hr", "bat_bb", "bat_so", "bas_sb", "bas_cs", "p_h", "p_hr", "p_bb", "p_so", "f_e", "f_dp"
+)
+
+colnames(data) <- new_cols
+```
+
+
+Check the distribution of the target variable
+
+```{r}
+data %>%
+  ggplot() +
+  geom_density((aes(x=target)))
+```
+
+Let's check the distribution of all features for outliers 
+
+```{r}
+ggplot(stack(data), aes(x = ind, y = values)) +
+  geom_boxplot()
+```
+
+
+Certain features exhibit very high outliers. Let's remove outliers and see what happens
+
+```{r}
+outliers <- function(x) {
+
+  Q1 <- quantile(x, probs=.25)
+  Q3 <- quantile(x, probs=.75)
+  iqr = Q3-Q1
+
+ upper_limit = Q3 + (iqr*2.5)
+ lower_limit = Q1 - (iqr*2.5)
+
+ x > upper_limit | x < lower_limit
+}
+
+remove_outliers <- function(df, cols = names(df)) {
+  for (col in cols) {
+    df <- df[!outliers(df[[col]]),]
+  }
+  df
+}
+```
+
+
+```{r}
+no_outliers <- remove_outliers(data, colnames(data))
+```
+
+```{r}
+ggplot(stack(no_outliers), aes(x = ind, y = values)) +
+  geom_boxplot()
+```
+
+
+The target variable is normally distributed. Let's check the distributions and correlations of all other features.
+
+```{r}
+ggpairs(no_outliers, upper = list(continuous = wrap("cor", size=2)))
+```
+
+Top correlating features:
+- bat_h: 0.389
+- bat_2b: 0.289
+- bat_bb: 0.233
+- p_hr: 0.189
+- bat_hr: 0.176
+- f_e: -0.176
+- bat_3b: 0.143
+
+Looking at the above, more than anything, features related to batting are the highest correlating with the target variable
+
+Things we will want to address:
+- deal with skewed features:
+  - bat_3b
+  - bas_sb
+  - bas_cs
+  - p_h
+  - p_bb
+  - p_so
+  - f_e
+- deal with bimodal features:
+  - bat_hr
+  - p_hr
+
+
+# Data Preparation
+
+```{r}
+summary(data$bat_3b)
+```
+
+
+
+Apply log transformation for all skewed features
+
+```{r}
+data$bat_3b <- log(data$bat_3b + 1)
+data$bas_sb <- log(data$bas_sb + 1)
+data$bas_cs <- log(data$bas_cs + 1)
+data$p_h <- log(data$p_h + 1)
+data$p_bb <- log(data$p_bb + 1)
+data$p_so <- log(data$p_so + 1)
+data$f_e <- log(data$f_e + 1)
+
+```
+
+```{r}
+scaled_data <- data %>% 
+  #dplyr::select(!c("target")) %>%
+  mutate_all(scale)
+
+```
+
+```{r}
+scaled_data$target <- data$target
+```
+
+
+```{r}
+ggpairs(scaled_data, upper = list(continuous = wrap("cor", size=2)))
+```
+
+
+# Build Models
+
+## First Model - highest correlating features
+
+- bat_h: 0.389
+- bat_2b: 0.289
+- bat_bb: 0.233
+- p_hr: 0.189
+- bat_hr: 0.176
+- f_e: -0.176
+- bat_3b: 0.143
+
+```{r}
+
+```
+
+
+```{r}
+model <- lm(target~ bat_h + bat_2b + bat_bb + p_hr + bat_hr + f_e + bat_3b, data=no_outliers)
+summary(model)
+```
+
+
+```{r}
+model <- lm(target~., data=no_outliers)
+
+summary(model)
+```
+
+
+
+
+
+
