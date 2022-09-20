@@ -1,0 +1,569 @@
+---
+title: "IN PROGRESS"
+author: "Coffy Andrews-Guo"
+date: "2022-09-12"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+
+
+
+
+VARIABLE NAME    | DEFINITION                           | THEORETICAL EFFECT
+---------------- | ------------------------------------ | -------------------
+INDEX            | Identification Variable (do not use) | None
+TARGET_WINS      | Number of wins                       |
+TEAM_BATTING_H   | Base Hits by batters (1B,2B,3B,HR)   | Positive Impact on Wins
+TEAM_BATTING_2B  | Doubles by batters (2B)              | Positive Impact on Wins
+TEAM_BATTING_3B  | Triples by batters (3B)              | Positive Impact on Wins
+TEAM_BATTING_HR  | Homeruns by batters (4B)             | Positive Impact on Wins
+TEAM_BATTING_BB  | Walks by batters                     | Positive Impact on Wins
+TEAM_BATTING_HBP | Batters hit by pitch (get a free base)| Positive Impact on Wins
+TEAM_BATTING_SO  | Strikeouts by batters                | Negative Impact on Wins
+TEAM_BASERUN_SB  | Stolen bases                         | Positive Impact on Wins
+TEAM_BASERUN_CS  | Caught stealing                      | Negative Impact on Wins
+TEAM_FIELDING_E  | Errors                               | Negative Impact on Wins
+TEAM_FIELDING_DP | Double Plays                         | Positive Impact on Wins
+TEAM_PITCHING_BB | Walks allowed                        | Negative Impact on Wins
+TEAM_PITCHING_H  | Hits allowed                         | Negative Impact on Wins
+TEAM_PITCHING_HR | Homeruns allowed                     | Negative Impact on Wins
+TEAM_PITCHING_SO | Strikeouts by pitchers               | Positive Impact on Wins
+
+
+
+
+
+
+## DATA EXPLORATION
+
+Loading the libraries
+```{r libraries}
+#required libraries
+suppressPackageStartupMessages(library(tidyverse))
+```
+
+
+Importing the datasets
+```{r eval-load, eval=FALSE}
+#import dataset: moneyball_evaluation_data
+eval <- read_csv("moneyball-evaluation-data.csv")
+```
+
+```{r train-load, eval=FALSE}
+#import dataset: moneyball_training_data
+train <- read_csv("moneyball-training-data.csv")
+```
+
+Saving the datasets as .RData
+```{r RData, eval=FALSE}
+#save datasets as .RData file
+save(eval, file = "eval.RData")
+save(train, file = "train.RData")
+```
+
+Loading the datasets from .Rdata
+```{r load-RData}
+#reload datasets written with the function save
+load("eval.RData")
+load("train.RData")
+```
+
+---
+
+
+1. Print the first few rows of the data frames,`eval` and `train`, using the `head()`function.
+```{r}
+#print the first six rows: eval
+head(eval[1:4])
+```
+
+
+```{r}
+#print the first six rows: train
+head(train[1:4])
+```
+
+---
+
+2. Return column names of data frames, `eval` and `train`, using `names()` function:
+```{r}
+names(eval)
+```
+
+
+```{r}
+names(train)
+```
+
+---
+
+3. View the number of rows and columns of data frames, `eval` and `train`, using `dim()` function:
+```{r}
+#number of rows and columns
+dim(eval)
+```
+
+```{r}
+#number of rows and columns
+dim(train)
+```
+
+---
+
+4. Explore structure of data frames, `eval` and `train`, using `str()` function:
+```{r}
+#remove/separate index column from dataset
+new_eval <- subset(eval, select = -INDEX)
+eval_index <- select(eval, "INDEX")
+```
+
+```{r, warning=FALSE, message=FALSE}
+str(new_eval)
+```
+
+```{r}
+new_train <- subset(train, select = -INDEX)
+train_index <- select(train, "INDEX")
+```
+
+```{r warning=FALSE, message=FALSE}
+str(new_train)
+```
+
+---
+
+5. Calculate descriptive statistics using `summary()` function:
+
+```{r}
+summary(new_train)
+```
+The output shows the minimum, 1st quantile, median, mean, 3rd quantile, and the maximum value for each of the columns in the data sets, `train`.
+
+---
+
+6. Count NA values by column using `colSums()` and `is.na()` functions:
+```{r}
+#count missing values
+colSums(is.na(new_eval))
+```
+
+```{r}
+#count missing values
+colSums(is.na(new_train))
+```
+
+```{r}
+suppressPackageStartupMessages(library("visdat"))
+```
+
+**Versions for Missing Values**
+
+### Option 1
+```{r}
+# missing values 
+new_train  %>%
+  summarise_all(list(~is.na(.)))%>%
+  pivot_longer(everything(),
+               names_to = "variables", values_to="missing") %>%
+  count(variables, missing) %>%
+  ggplot(aes(y=variables,x=n,fill=missing))+
+  geom_col()+
+  scale_fill_manual(values=c("skyblue3","gold"))+
+  theme(axis.title.y=element_blank())
+
+```
+
+```{r}
+suppressPackageStartupMessages(library("VIM"))
+```
+
+
+### Option 2.
+```{r message=FALSE, warning=FALSE}
+aggr_plot <- aggr(new_train, col=c('navyblue','red'), numbers=TRUE, sortVars=TRUE, labels=names(new_train), cex.axis=.48, gap=2, ylab=c("Histogram of missing data","Pattern"))
+```
+The plot indicates that almost 57% of the samples are missing information, 92% are missing the `TEAM_BATTING_HBP` value, and the remaining ones show other missing patterns.  
+
+
+### Option 3. 
+```{r}
+suppressPackageStartupMessages(library("scales"))
+```
+
+
+```{r}
+library("DataExplorer")
+```
+
+
+```{r}
+plot_missing(new_train, missing_only = TRUE, geom_label_args = list("size" = 3, "label.padding" = unit(0.1, "lines")))
+```
+
+---
+
+7. Visual Data Exploration - Draw Pairs Plot of Data Frame Columns using `ggpairs()` function of `GGally` package:
+```{r}
+#install.packages("GGally")                         #Install GGally package
+suppressPackageStartupMessages(library("GGally"))   #Load GGally package
+```
+
+Apply the ggpairs function of the GGally package to `eval` data frame:
+
+
+```{r warning=FALSE, message=FALSE, out.width="80%"}
+
+ggpairs(new_train)                                       #Draw pairs plot
+```
+
+```{r}
+suppressPackageStartupMessages(library(corrplot))
+```
+
+
+```{r}
+#correlation matrix
+#using only pairwise-complete observations to avoid NA values
+M <- cor(new_train, use="pairwise.complete.obs")
+head(round(M, 2))
+
+#visualizing correlogram
+corrplot(M, method="circle", tl.col = "black", tl.cex = 0.6, tl.srt = 70)
+
+#as pie
+corrplot(M, method = "pie", tl.col = "black", tl.cex = 0.6, tl.srt = 70 )
+
+#as color
+corrplot(M, method = "color", tl.col = "black", tl.cex = 0.6, tl.srt = 70)
+
+#as number
+corrplot(M, method = "number", tl.col = "black", tl.cex = 0.6, tl.srt = 70)
+```
+
+
+
+---
+
+8. Visual Data Exploration - Draw Boxplots of Multiple columns using `ggplot2` package:
+
+First, we have to manipulate the data, `eval`, using the `tidyr package`.
+```{r}
+#install.packages("tidyr")         #Install and load tidyr
+suppressPackageStartupMessages(library(tidyr))
+```
+
+
+Apply the `pivot_longer function` to reshape some of the columns of our data from wide to long format:
+```{r}
+#Reshape data frame
+train_long <- pivot_longer(new_train,
+                          c("TARGET_WINS", "TEAM_BATTING_H", "TEAM_BATTING_2B", "TEAM_BATTING_3B", "TEAM_BATTING_HR", "TEAM_BATTING_BB", "TEAM_BATTING_SO", "TEAM_BASERUN_SB", "TEAM_BASERUN_CS", "TEAM_BATTING_HBP", "TEAM_PITCHING_H", "TEAM_PITCHING_HR", "TEAM_PITCHING_BB", "TEAM_PITCHING_SO", "TEAM_FIELDING_E", "TEAM_FIELDING_DP"))
+```
+
+
+Apply the ggplot and geom_boxplot functions to the `train_long` data to visualize each of the selected columns in a side-by-side boxplot graphic:
+```{r message=FALSE, warning=FALSE}
+#Draw boxplots
+#rows containing non-finite value (stat_boxplot) removed NA rows
+ggplot(train_long, 
+       aes(x = log(value),
+           fill = name)) +
+  geom_boxplot()
+```
+In (Figure x) illustrates each of our columns in a separate boxplot. The plot shows the value distribution in each column, and how the values in our columns compare to each other.
+
+
+---
+
+9. Visual Data Exploration - Draw `facet_wrap` histograms of multiple columns using `ggplot2 package`:
+
+Creating a histogram for each of our columns, and using the `facet_wrap function` to separate each column in its own plotting panel:
+
+```{r}
+#Draw histograms
+ggplot(train_long, 
+       aes(x = log(value))) +
+  geom_histogram(bins = 15) +
+  facet_wrap(name ~ ., scales = "free")
+```
+In (Figure x) illustrates `train` data frame columns in separate histograms. Note that the scales of some panels are different.
+
+---
+
+## DATA PREPARATION
+
+1. Replace Missing Values
+
+
+```{r}
+#impute missing data with zero
+
+new_train[is.na(new_train)] <- 0
+new_eval[is.na(new_eval)] <- 0
+```
+
+
+```{r}
+#check for missing values
+sapply(new_train, function(x) sum(is.na(x)))
+```
+
+
+2. Remove Outliers
+
+**Detect Outliers | Multivariate Model Approach**
+http://r-statistics.co/Outlier-Treatment-With-R.html
+```{r}
+#create new variable for dataset
+train_df <- data.frame(new_train)
+#Cooks Distance measure
+mod <- lm(TARGET_WINS ~ ., data = new_train)
+cooksd <- cooks.distance(mod)
+```
+
+
+```{r}
+#Influence measures
+plot(cooksd, pch="*", cex=2, main="Influential Obs by Cooks distance")  # plot cook's distance
+abline(h = 4*mean(cooksd, na.rm=T), col="red")  # add cutoff line
+text(x=1:length(cooksd)+1, y=cooksd, labels=ifelse(cooksd>4*mean(cooksd, na.rm=T),names(cooksd),""), col="red")  # add labels
+```
+
+```{r}
+#Influence rows from the original data
+influential <- as.numeric(names(cooksd)[(cooksd > 4*mean(cooksd, na.rm=T))])  # influential row numbers
+head(new_train[influential, ])  # influential observations.
+```
+
+**Outlier Test**
+```{r}
+library("car")
+```
+
+The function `outlierTest` from `car` package gives the most extreme observation based on the given model. 
+```{r}
+car::outlierTest(mod)
+```
+
+This output suggests that observation in row 859 is most extreme.
+
+
+
+### Assumptions for Linear Regression
+
+
+#### Independence of observations (aka no autocorrelation)
+
+https://www.statology.org/what-is-a-strong-correlation/#:~:text=In%20summary%3A%201%20As%20a%20rule%20of%20thumb%2C,the%20dataset%20along%20with%20a%20potential%20nonlinear%20relationship.
+Rule of thumb for interpreting the strength of the relationship between two variables base on the value of r:
+
+Absolute value of r | Strength of relationship
+------------------- | ------------------------
+r < 0.25            | No relationship
+------------------- | ------------------------
+0.25 < r < 0.5      | Weak relationship
+------------------- | ------------------------
+0.5 < r < 0.75      | Moderate relationship
+------------------- | ------------------------
+r > 0.75            | Strong relationship
+
+
+
+The `cor()` function will test the relationship between the independent variables to make sure they aren't too highly correlated.
+```{r}
+round(cor(new_train), 2)
+```
+
+```{r}
+library(psych)
+```
+
+```{r}
+pairs.panels(new_train)
+```
+
+
+```{r}
+corrplot(cor(new_train),                      #Correlation matrix
+               method = "circle",             #Correlation plot method
+               order = "hclust",              #Ordering method of the matrix
+               hclust.method = "ward.D",      #If order = "hclust", is the cluster method to be used
+               addrect = 2,                   #If order = "hclust", number of cluster rectangles
+               rect.col = 3,                  #Color of the rectangles   
+               tl.col = "black",              #Labels color
+               rect.lwd = 3,                  #Line width of the rectangles
+               tl.cex = 0.6, 
+               tl.srt = 70)
+```
+
+
+```{r}
+# devtools::install_github("laresbernardo/lares")
+library(lares)
+
+corr_cross(new_train, # name of dataset
+  max_pvalue = 0.05, # display only significant correlations (at 5% level)
+  top = 5 # display top 10 couples of variables (by correlation coefficient)
+)
+```
+Negative correlations are represented in red and positive correlations in blue. The correlation between TEAM_BATTING_HR and TEAM_PITCHING_HR is high (0.97 | 97% correlation), which we could exclude both parameters in our model. A strong negative correlation between TEAM_FIELDING_E and TEAM_FIELDING_DP (-0.76 | -76% correlation) has no relationship.
+
+
+
+#### Normality
+
+Use the `hist()` function to test whether your dependent variable follows a normal distribution.
+```{r}
+hist(new_train$TARGET_WINS)
+```
+The distributed of observations has a bell shaped, so we can proceed with the linear regression.
+
+
+#### Linearity
+
+We will check this using scatterplots:
+
+```{r}
+par(mfrow = c(2, 2))
+plot(TARGET_WINS ~ TEAM_BATTING_H, data = new_train)
+plot(TARGET_WINS ~ TEAM_BATTING_2B, data = new_train)
+plot(TARGET_WINS ~ TEAM_BATTING_3B, data = new_train)
+plot(TARGET_WINS ~ TEAM_BATTING_HR, data = new_train)
+plot(TARGET_WINS ~ TEAM_BATTING_BB, data = new_train)
+plot(TARGET_WINS ~ TEAM_BATTING_SO, data = new_train)
+plot(TARGET_WINS ~ TEAM_BASERUN_SB, data = new_train)
+plot(TARGET_WINS ~ TEAM_BASERUN_CS, data = new_train)
+plot(TARGET_WINS ~ TEAM_BATTING_HBP, data = new_train)
+plot(TARGET_WINS ~ TEAM_PITCHING_H, data = new_train)
+plot(TARGET_WINS ~ TEAM_PITCHING_HR, data = new_train)
+plot(TARGET_WINS ~ TEAM_PITCHING_BB, data = new_train)
+plot(TARGET_WINS ~ TEAM_PITCHING_SO, data = new_train)
+plot(TARGET_WINS ~ TEAM_FIELDING_E, data = new_train)
+plot(TARGET_WINS ~ TEAM_FIELDING_DP, data = new_train)
+```
+
+#### Homoscedasticity
+
+We will check this after we make the model 
+
+## BUILD MODELS
+
+### Multiple Linear Regression Model
+
+```{r}
+library(caTools)
+```
+
+```{r}
+set.seed(123)
+
+# Feature Scaling
+#training_set <- data.frame(scale(new_train))
+#test_set <- data.frame(scale(new_eval))
+
+
+# Fitting Multiple Linear Regression to the Training set
+mlr = lm(formula = TARGET_WINS ~ .,
+               data = new_train)
+```
+
+```{r}
+summary(mlr)
+```
+
+
+```{r}
+library(MASS)
+```
+
+
+```{r}
+mlrstep.model <- stepAIC(mlr, direction = "both", 
+                      trace = FALSE)
+summary(mlrstep.model)
+```
+
+----(Model 2)----
+
+```{r}
+mlr2 = lm(sqrt(TARGET_WINS) ~ .,
+               data = new_train)
+summary(mlr2)
+```
+
+**Square Root Transformation | Poisson distribution**
+
+page 78 - Linear Model
+
+```{r}
+
+mlr2step.model <- stepAIC(mlr2, direction = "both", 
+                      trace = FALSE)
+summary(mlr2step.model)
+```
+
+
+**Least Squares**
+
+page 125 - Linear Models
+```{r}
+rlm1 = rlm(TARGET_WINS ~ .,
+               data = new_train)
+summary(rlm1)
+```
+
+
+
+
+
+```{r}
+# Predicting the Test set results
+y_pred = predict(rlm1, newdata = new_eval)
+```
+
+```{r}
+y_pred
+```
+
+
+
+
+
+## SELECT MODELS
+
+
+**RMSE**
+
+```{r}
+#load Metrics package
+library(Metrics)
+```
+
+
+```{r}
+#calculate RMSE
+#rmse(data$actual, data$predicted)
+rmse(regressor, y_pred)
+```
+
+
+
+
+```{r}
+#calculate RMSE
+sqrt(mean((data$actual - data$predicted)^2))
+```
+
+
+
+# Appendix: All code for this report (https://bookdown.org/yihui/rmarkdown-cookbook/code-appendix.html)
+
+```{r ref.label=knitr::all_labels(), echo=TRUE, eval=FALSE}
+
+```
+
+
