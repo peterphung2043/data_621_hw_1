@@ -16,7 +16,6 @@ library(dplyr)
 library(tidyverse)
 library(GGally)
 library(MASS)
-library(reshape2)
 ```
 
 
@@ -41,6 +40,12 @@ There are 2276 observations, with 16 features and 1 target variable
 head(data)
 ```
 
+```{r}
+data %>%
+  filter(is.na(TEAM_BASERUN_CS))
+```
+
+
 
 ```{r}
 summary(data)
@@ -55,11 +60,27 @@ sapply(data, function(x) sum(is.na(x))/dim(data)[1])
 
 In total there are 6 columns with missing values:
 - Strikeouts by batters (5%)
-- Stolen bases (6%)
-- Caught stealing (34%)
+Highly unlikely, should use median or regression model for imputation
+
+- Stolen bases (6%) bas_sb
+stolen bases weren’t tracked officially until 1887, so some of the missing data could be from 1871-1886. We could impute those values.
+
+- Caught stealing (34%) bas_cs
+stolen bases weren’t tracked officially until 1887, so some of the missing data could be from 1871-1886. We could impute those values.
+
 - Batter hit by pitch (92%)
+Replace with 0
+
 - Strikeouts by pitchers (4%)
+highly unlikely, should use median or regression model for imputation
+
 - Double plays (12%)
+highly unlikely, should use median or regression model for imputation
+
+
+
+
+
 
 We will impute these columns using each's respective median value. We will discard "Batter hit by pitch" due to 92% of entries missing.
 
@@ -105,19 +126,65 @@ data %>%
   geom_density((aes(x=target)))
 ```
 
-# get distribution of all features
+Let's check the distribution of all features for outliers 
 
 ```{r}
 ggplot(stack(data), aes(x = ind, y = values)) +
   geom_boxplot()
 ```
 
+bat_h: most hits by batter in a season is 1783, so anything over should be removed or imputed
+https://www.baseball-almanac.com/recbooks/hits_records_mlb_teams.shtml
+
+
+p_h: most hits by batter in a season is 1783, so anything over should be removed or imputed
+https://www.baseball-almanac.com/recbooks/hits_records_mlb_teams.shtml
+
+p_so: most strikeouts in a season is 1595 so anything above this should be removed or imputed
+https://www.baseball-almanac.com/recbooks/rb_strike2.shtml
+
+f_e: most errors in a season is 886, anything above this should be removed or imputed
+https://www.baseball-fever.com/forum/general-baseball/statistics-analysis-sabermetrics/2403-team-errors-in-a-season
+
+
+Certain features exhibit very high outliers. Let's remove outliers and see what happens
+
+```{r}
+outliers <- function(x) {
+
+  Q1 <- quantile(x, probs=.25)
+  Q3 <- quantile(x, probs=.75)
+  iqr = Q3-Q1
+
+ upper_limit = Q3 + (iqr*2.5)
+ lower_limit = Q1 - (iqr*2.5)
+
+ x > upper_limit | x < lower_limit
+}
+
+remove_outliers <- function(df, cols = names(df)) {
+  for (col in cols) {
+    df <- df[!outliers(df[[col]]),]
+  }
+  df
+}
+```
+
+
+```{r}
+no_outliers <- remove_outliers(data, colnames(data))
+```
+
+```{r}
+ggplot(stack(no_outliers), aes(x = ind, y = values)) +
+  geom_boxplot()
+```
 
 
 The target variable is normally distributed. Let's check the distributions and correlations of all other features.
 
 ```{r}
-ggpairs(data, upper = list(continuous = wrap("cor", size=2)))
+ggpairs(no_outliers, upper = list(continuous = wrap("cor", size=2)))
 ```
 
 Top correlating features:
@@ -147,47 +214,6 @@ Things we will want to address:
 
 # Data Preparation
 
-```{r}
-summary(data$bat_3b)
-```
-
-
-# remove outliers
-
-```{r}
-detect_outlier <- function(x) {
-   
-    # calculate first quantile
-    Quantile1 <- quantile(x, probs=.25)
-   
-    # calculate third quantile
-    Quantile3 <- quantile(x, probs=.75)
-   
-    # calculate inter quartile range
-    IQR = Quantile3-Quantile1
-   
-    # return true or false
-    x > Quantile3 + (IQR*1.5) | x < Quantile1 - (IQR*1.5)
-}
- 
-# create remove outlier function
-remove_outlier <- function(dataframe,
-                            columns=names(dataframe)) {
-   
-    # for loop to traverse in columns vector
-    for (col in columns) {
-       
-        # remove observation if it satisfies outlier function
-        dataframe <- dataframe[!detect_outlier(dataframe[[col]]), ]
-    }
-   
-    # return dataframe
-    print("Remove outliers")
-    print(dataframe)
-}
-```
-
-
 
 Apply log transformation for all skewed features
 
@@ -202,9 +228,20 @@ data$f_e <- log(data$f_e + 1)
 
 ```
 
+```{r}
+scaled_data <- data %>% 
+  #dplyr::select(!c("target")) %>%
+  mutate_all(scale)
+
+```
 
 ```{r}
-ggpairs(data, upper = list(continuous = wrap("cor", size=2)))
+scaled_data$target <- data$target
+```
+
+
+```{r}
+ggpairs(scaled_data, upper = list(continuous = wrap("cor", size=2)))
 ```
 
 
@@ -221,13 +258,18 @@ ggpairs(data, upper = list(continuous = wrap("cor", size=2)))
 - bat_3b: 0.143
 
 ```{r}
-model <- lm(target~ bat_h + bat_2b + bat_bb + p_hr + bat_hr + f_e + bat_3b, data=data)
+
+```
+
+
+```{r}
+model <- lm(target~ bat_h + bat_2b + bat_bb + p_hr + bat_hr + f_e + bat_3b, data=no_outliers)
 summary(model)
 ```
 
 
 ```{r}
-model <- lm(target~., data=data)
+model <- lm(target~., data=no_outliers)
 
 summary(model)
 ```
