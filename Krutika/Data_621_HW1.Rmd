@@ -13,6 +13,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(olsrr)
 library(GGally)
+library(reshape)
 ```
 
 
@@ -69,9 +70,29 @@ ggplot(data = plot, aes(value, TARGET_WINS)) +
   facet_wrap(.~variable, scales = "free") +
   geom_smooth(method = "lm")
 ```
+```{r Renaming Columns based on impact}
+data2 <- data
+pos <- c("TEAM_BATTING_H", "TEAM_BATTING_1B", "TEAM_BATTING_2B", "TEAM_BATTING_3B", "TEAM_BATTING_HR", "TEAM_BATTING_BB",  "TEAM_BATTING_HBP", "TEAM_BASERUN_SB", "TEAM_FIELDING_DP", "TEAM_PITCHING_SO")
 
+for(i in seq(1,length(colnames(data2))))
+  {
+    if(colnames(data2)[i] != 'TARGET_WINS')
+    {
+      if(colnames(data2)[i] %in% pos)
+      {
+        colnames(data2)[i] <- paste('P_',colnames(data2)[i],sep = '')
+      }
+      else
+      {
+        colnames(data2)[i] <- paste('N_',colnames(data2)[i],sep = '')
+      }
+    }
+}
+colnames(data2)
+```
 
 # 2 Data Preperation
+
 
 ```{r}
 # Simplest Data preperation
@@ -84,21 +105,15 @@ for(col in train)
 
 ```
 
-NA Approach
+# Data Selection
 
-Columns with NAs
+Creating 1HB column from columns 2-6
 
-TEAM_BATTING_SO 102: Strikeouts by pitchers 
-
-TEAM_BASERUN_SB 131: Stolen bases 
-
-TEAM_BASERUN_CS 772: Caught stealing 
-
-TEAM_BATTING_HBP 2085: Batters hit by pitch (get a free base)
-
-TEAM_PITCHING_SO 102: Strikeouts by batters 
-
-TEAM_FIELDING_DP 286: Double Plays 
+```{r}
+data <- train[-1]
+data <- data %>% mutate(TEAM_BATTING_1B = TEAM_BATTING_H - sum(TEAM_BATTING_2B+TEAM_BATTING_3B+TEAM_BATTING_HR))
+eval <- eval %>% mutate(TEAM_BATTING_1B = TEAM_BATTING_H - sum(TEAM_BATTING_2B+TEAM_BATTING_3B+TEAM_BATTING_HR))
+```
 
 
 # 3 Build Models`
@@ -106,10 +121,10 @@ TEAM_FIELDING_DP 286: Double Plays
 ```{r}
 # Simple Linear Regression Model
 
-lm <- lm(TARGET_WINS ~ TEAM_BATTING_H, data = train)
+lm <- lm(TARGET_WINS ~ TEAM_BATTING_H + TEAM_BATTING_BB + TEAM_BATTING_HBP, data = data)
 p_tw <- data.frame('Predicted Target Wins' = predict(lm,eval))
 p_tw
-colnames(train)
+paste('NA Count = ',sapply(p_tw, function(x) sum(is.na(x))), ' Prop = ', round(sapply(p_tw, function(x) sum(is.na(x)))/nrow(p_tw),3))
 ```
 
 ```{r All possible models}
