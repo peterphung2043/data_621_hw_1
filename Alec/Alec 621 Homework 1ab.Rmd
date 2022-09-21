@@ -16,6 +16,8 @@ library(dplyr)
 library(tidyverse)
 library(GGally)
 library(MASS)
+library(mice)
+library(caret)
 ```
 
 
@@ -41,16 +43,27 @@ head(data)
 ```
 
 ```{r}
-data %>%
-  filter(is.na(TEAM_BASERUN_CS))
-```
-
-
-
-```{r}
 summary(data)
 ```
 
+```{r}
+new_cols <- c("index", "target", "bat_h", "bat_2b", "bat_3b", "bat_hr", "bat_bb", "bat_so", "bas_sb", "bas_cs", "bat_hbp", "p_h", "p_hr", "p_bb", "p_so", "f_e", "f_dp"
+)
+
+colnames(data) <- new_cols
+```
+
+
+Looking at distributions
+
+```{r}
+data %>%
+  keep(is.numeric) %>% 
+  gather() %>% 
+  ggplot(aes(value)) +
+    facet_wrap(~ key, scales = "free") +
+    geom_histogram()
+```
 
 ### Check for Missing Values
 
@@ -62,10 +75,10 @@ In total there are 6 columns with missing values:
 - Strikeouts by batters (5%)
 Highly unlikely, should use median or regression model for imputation
 
-- Stolen bases (6%) bas_sb
+- Stolen bases (6%)
 stolen bases weren’t tracked officially until 1887, so some of the missing data could be from 1871-1886. We could impute those values.
 
-- Caught stealing (34%) bas_cs
+- Caught stealing (34%)
 stolen bases weren’t tracked officially until 1887, so some of the missing data could be from 1871-1886. We could impute those values.
 
 - Batter hit by pitch (92%)
@@ -78,26 +91,22 @@ highly unlikely, should use median or regression model for imputation
 highly unlikely, should use median or regression model for imputation
 
 
-
-
-
-
 We will impute these columns using each's respective median value. We will discard "Batter hit by pitch" due to 92% of entries missing.
 
-
 ```{r}
-data$TEAM_BATTING_SO[is.na(data$TEAM_BATTING_SO)] <- median(data$TEAM_BATTING_SO, na.rm = T)
-data$TEAM_BASERUN_SB[is.na(data$TEAM_BASERUN_SB)] <- median(data$TEAM_BASERUN_SB, na.rm = T)
-data$TEAM_BASERUN_CS[is.na(data$TEAM_BASERUN_CS)] <- median(data$TEAM_BASERUN_CS, na.rm = T)
-data$TEAM_PITCHING_SO[is.na(data$TEAM_PITCHING_SO)] <- median(data$TEAM_PITCHING_SO, na.rm = T)
-data$TEAM_FIELDING_DP[is.na(data$TEAM_FIELDING_DP)] <- median(data$TEAM_FIELDING_DP, na.rm = T)
+data$bat_so[is.na(data$bat_so)] <- median(data$bat_so, na.rm = T)
+data$bas_sb[is.na(data$bas_sb)] <- median(data$bas_sb, na.rm = T)
+data$bas_cs[is.na(data$bas_cs)] <- median(data$bas_cs, na.rm = T)
+data$bat_hbp[is.na(data$bat_hbp)] <- 0
+data$p_so[is.na(data$p_so)] <- median(data$p_so, na.rm = T)
+data$f_dp[is.na(data$f_dp)] <- median(data$f_dp, na.rm = T)
 ```
 
 
 ```{r}
 # remove unused columns
 
-data <- data %>% dplyr::select(!c("INDEX", "TEAM_BATTING_HBP"))
+data <- data %>% dplyr::select(!c("index"))
 ```
 
 
@@ -108,22 +117,46 @@ data <- data %>% dplyr::select(!c("INDEX", "TEAM_BATTING_HBP"))
 sapply(data, function(x) sum(is.na(x))/dim(data)[1])
 ```
 
-Rename the columns for easier reading
+### Examine base model, no transformations, no engineering
 
 ```{r}
-new_cols <- c("target", "bat_h", "bat_2b", "bat_3b", "bat_hr", "bat_bb", "bat_so", "bas_sb", "bas_cs", "p_h", "p_hr", "p_bb", "p_so", "f_e", "f_dp"
-)
-
-colnames(data) <- new_cols
+model <- lm(target~., data=data)
+summary(model)
 ```
 
 
-Check the distribution of the target variable
+### Create Saber Feature
+
+Saber Model
+
+Sabermetrics has become the rage in baseball, actually popularized by Billy Beane and the data set we are exploring. As a result, we built a model that centers around one of these advance analytics known as BsR or base runs. This statistic (designed by David Smyth in the 1990’s) estimates the amount of runs a team SHOULD score, adding an intriguing element to a data set which does not include runs (see http://tangotiger.net/wiki_archive/Base_Runs.html for more information). The formula For BsR is as follows:
+
+BSR = A*B/(B+A)+C where:
+
+A = TEAM_BATTING_1B + TEAM_BATTING_2B + TEAM_BATTING_3B + TEAM_BATTING_BB
+
+B = 1.02(1.4TEAM_TOTAL_BASES -0.6TEAM_BATTING_H + 0.1TEAM_BATTING_BB)
+
+C = TEAM_BATTING_HR
+
+Since we eliminate the value of TEAM_BATTING_H, we sum up singles, doubles, triples and home runs in the actual code, and the approach for TEAM_TOTAL_BASES is described in model 2. The data for BSR exhibit a fairly normal distribution.
+
 
 ```{r}
-data %>%
-  ggplot() +
-  geom_density((aes(x=target)))
+data$bat_1b <- data$bat_h - data$bat_2b - data$bat_3b - data$bat_hr
+data$total_bases <- data$bat_1b + 2*data$bat_2b + 3*data$bat_3b + 4*data$bat_hr
+
+
+A <- data$bat_h
+B <- 1.02*(1.4*data$total_bases -0.6*data$bat_h + 0.1*data$bat_bb)
+C <- data$bat_hr
+
+data$saber <- A*B/(B+A)+C
+```
+
+```{r}
+model <- lm(target~., data=data)
+summary(model)
 ```
 
 Let's check the distribution of all features for outliers 
@@ -136,15 +169,62 @@ ggplot(stack(data), aes(x = ind, y = values)) +
 bat_h: most hits by batter in a season is 1783, so anything over should be removed or imputed
 https://www.baseball-almanac.com/recbooks/hits_records_mlb_teams.shtml
 
+We can replace these values with the median for the column
 
-p_h: most hits by batter in a season is 1783, so anything over should be removed or imputed
+```{r}
+data$bat_h[data$bat_h > 1783] <- median(data$bat_h[data$bat_h <= 1783])
+```
+
+
+p_h: if the most hits for a team is 1783, then the most hits allowed should be the same
 https://www.baseball-almanac.com/recbooks/hits_records_mlb_teams.shtml
+
+However this is not proven. We can also use interquartile range approach.
+
+
+```{r}
+Q1 <- quantile(data$p_h, probs=.25)
+Q3 <- quantile(data$p_h, probs=.75)
+iqr = Q3-Q1
+upper_limit = Q3 + (iqr*1.5)
+lower_limit = Q1 - (iqr*1.5)
+replace_median <- median(data$p_h[(data$p_h < upper_limit) | (data$p_h > lower_limit)])
+
+data$p_h[(data$p_h > upper_limit) | (data$p_h < lower_limit)] <- replace_median
+
+```
+
 
 p_so: most strikeouts in a season is 1595 so anything above this should be removed or imputed
 https://www.baseball-almanac.com/recbooks/rb_strike2.shtml
 
+```{r}
+data$p_so[data$p_so > 1595] <- median(data$p_so[data$p_so <= 1595])
+```
+
+
 f_e: most errors in a season is 886, anything above this should be removed or imputed
 https://www.baseball-fever.com/forum/general-baseball/statistics-analysis-sabermetrics/2403-team-errors-in-a-season
+
+```{r}
+data$f_e[data$f_e > 886] <- median(data$f_e[data$f_e <= 886])
+```
+
+
+p_bb: can't find data on this. We can use the interquartile approach
+
+```{r}
+Q1 <- quantile(data$p_bb, probs=.25)
+Q3 <- quantile(data$p_bb, probs=.75)
+iqr = Q3-Q1
+upper_limit = Q3 + (iqr*1.5)
+lower_limit = Q1 - (iqr*1.5)
+replace_median <- median(data$p_bb[(data$p_bb < upper_limit) | (data$p_bb > lower_limit)])
+
+data$p_bb[(data$p_bb > upper_limit) | (data$p_bb < lower_limit)] <- replace_median
+
+```
+
 
 
 Certain features exhibit very high outliers. Let's remove outliers and see what happens
@@ -172,11 +252,7 @@ remove_outliers <- function(df, cols = names(df)) {
 
 
 ```{r}
-no_outliers <- remove_outliers(data, colnames(data))
-```
-
-```{r}
-ggplot(stack(no_outliers), aes(x = ind, y = values)) +
+ggplot(stack(data), aes(x = ind, y = values)) +
   geom_boxplot()
 ```
 
@@ -184,13 +260,14 @@ ggplot(stack(no_outliers), aes(x = ind, y = values)) +
 The target variable is normally distributed. Let's check the distributions and correlations of all other features.
 
 ```{r}
-ggpairs(no_outliers, upper = list(continuous = wrap("cor", size=2)))
+ggpairs(data, upper = list(continuous = wrap("cor", size=1)))
 ```
 
 Top correlating features:
 - bat_h: 0.389
 - bat_2b: 0.289
 - bat_bb: 0.233
+- p_bb: 0.204
 - p_hr: 0.189
 - bat_hr: 0.176
 - f_e: -0.176
@@ -214,6 +291,11 @@ Things we will want to address:
 
 # Data Preparation
 
+b3b
+bs_sb
+bs_cs
+b_hbp
+f_e
 
 Apply log transformation for all skewed features
 
@@ -221,58 +303,64 @@ Apply log transformation for all skewed features
 data$bat_3b <- log(data$bat_3b + 1)
 data$bas_sb <- log(data$bas_sb + 1)
 data$bas_cs <- log(data$bas_cs + 1)
-data$p_h <- log(data$p_h + 1)
-data$p_bb <- log(data$p_bb + 1)
-data$p_so <- log(data$p_so + 1)
+data$bat_hbp <- log(data$bat_hbp + 1)
 data$f_e <- log(data$f_e + 1)
 
 ```
 
 ```{r}
-scaled_data <- data %>% 
-  #dplyr::select(!c("target")) %>%
-  mutate_all(scale)
-
-```
-
-```{r}
-scaled_data$target <- data$target
+ggplot(stack(data), aes(x = ind, y = values)) +
+  geom_boxplot()
 ```
 
 
 ```{r}
-ggpairs(scaled_data, upper = list(continuous = wrap("cor", size=2)))
+ggpairs(data, upper = list(continuous = wrap("cor", size=1)))
 ```
 
 
 # Build Models
 
-## First Model - highest correlating features
+## First Model - highest correlating features (above 0.2)
 
-- bat_h: 0.389
+- total_bases: 0.423
+- saber: 0.395
+- bat_h: 0.353
 - bat_2b: 0.289
 - bat_bb: 0.233
-- p_hr: 0.189
-- bat_hr: 0.176
-- f_e: -0.176
-- bat_3b: 0.143
+- bat_1b: 0.217
+- p_bb: 0.204
+
+### Top features without engineering
 
 ```{r}
-
-```
-
-
-```{r}
-model <- lm(target~ bat_h + bat_2b + bat_bb + p_hr + bat_hr + f_e + bat_3b, data=no_outliers)
+model <- lm(target~ bat_h + bat_2b + bat_bb + bat_1b + p_bb, data=data)
 summary(model)
 ```
 
 
+### Remove correlating features from feature engineering (just saber)
+
 ```{r}
-model <- lm(target~., data=no_outliers)
+model <- lm(target~ saber, data=data)
+summary(model)
+```
+
+### Top features including engineering
+
+```{r}
+model <- lm(target~ total_bases + saber + bat_h + bat_2b + bat_bb + bat_1b + p_bb, data=data)
+summary(model)
+```
+
+### All features
+
+```{r}
+model <- lm(target~., data=data)
 
 summary(model)
 ```
+
 
 
 
