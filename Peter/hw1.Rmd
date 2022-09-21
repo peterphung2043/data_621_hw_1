@@ -6,24 +6,148 @@ date: '2022-09-10'
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+require(ggplot2)
+require(faraway)
+require(corrplot)
+require(MASS)
+require(reshape)
+require(car)
+rm(list = ls())
+if(!is.null(dev.list()))dev.off()
 ```
 
-## R Markdown
+## Task
+Your objective is to build a multiple linear regression model on the training data to predict the number of wins for the team. You can only use the variables given to you (or variables that you derive from the variables provided). 
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+## Regression Diagnostics for Multiple Regression
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+Chapter 6 in A Modern Approach to Regression explains that when fitting a multiple regression model, it is important to:
 
-```{r cars}
-summary(cars)
+1. Determine whether the proposed regression model is a valid model (i.e., determine whether it provides an adequate fit to the data). The main tools we will use to validate regression assumptions are plots involving standardized residuals and/or fitted values. We shall see that these plots enable us to assess visually whether the assumptions are being violated and, under certain conditions, point to what should be done to overcome these violations. We shall also consider a tool, called marginal model plots, which have wider application than residual plots.
+
+2. Determine which (if any) of the data points have predictor values that have an unusually large effect on the estimated regression model. (Recall that such points are called leverage points.)
+
+3. Determine which (if any) of the data points are outliers, that is, points which do not follow the pattern set by the bulk of the data, when one takes into account the given model.
+
+4. Assess the effect of each predictor variable on the response variable, having adjusted for the effect of other predictor variables using added variable plots.
+
+5. Assess the extent of collinearity among the predictor variables using variance
+inflation factors
+
+## Import Data and Inferential Statistics
+
+```{r}
+moneyball_training_data <- read.csv("~/Documents/DATA 621/data_621_hw_1/data/moneyball-training-data.csv", colClasses = c("NULL", rep(NA, 16))) + 1
+
+summary(moneyball_training_data)
+```
+So it looks like all of these variables are quantitative. `TEAM_BATTING+HBP` is missing 2085 observations. We might have to delete that variable.
+
+Try replacing the 0 values with really small values(1e-6) which will allow you to perform the Box-Cox transformation.
+
+```{r}
+moneyball_training_data <- subset(moneyball_training_data, select = -c(TEAM_BATTING_HBP))
+
 ```
 
-## Including Plots
+The statistics reveal that several of the observations have NA values:
 
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
+```{r}
+which(colSums(is.na(moneyball_training_data)) > 0)
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+We can either ignore these predictors entirely or ignore the observations that contain any NA's.
+
+The statistics show that `TEAM_FIELDING_E`, `TEAM_PITCHING_H`, `TEAM_PITCHING_S0`, `TEAM_PITCHING_SB` have a really high maximum value compared to the median and 3rd quarter.
+
+```{r}
+for (predictor in colnames(moneyball_training_data)){
+  print(ggplot(moneyball_training_data, aes(x = eval(as.name(predictor)))) +
+        geom_boxplot() +
+        coord_flip() +
+        xlab(predictor))
+}
+```
+
+```{r}
+for (predictor in colnames(moneyball_training_data)){
+  print(ggplot(moneyball_training_data, aes(x = eval(as.name(predictor)), y = TARGET_WINS)) +
+        geom_point() +
+        xlab(predictor))
+}
+```
+
+```{r}
+ggplot(data = melt(moneyball_training_data, "TARGET_WINS"), aes(value)) +
+  geom_histogram() +
+  facet_wrap(.~variable, scales = "free")
+```
+
+Create two models, one with the bimodal data, and one without the bimodal data. So it looks like `TEAM_BATTING_HR`, `TEAM_BATTING_SO`, and `TEAM_PITCHING_HF`. But let's continue...
+
+```{r}
+corrplot(cor(moneyball_training_data[-1]), method = 'circle')
+```
+
+
+Top of page 158 in A Modern Approach to Regression describes the following for an example on food prices:
+
+"Assuming that condition (6.6) holds we next look at plots of standardized residuals against each predictor (see Figure 6.2). The random nature of these plots is indicative that model (6.8) is a valid model for the data."
+
+Therefore, let's assume that we have a linear model fitting all of the predictors and view the plots of standardized residuals against all of the predictors.
+
+Note that when using all of the variables, observations with any NAs are omitted.
+```{r}
+
+lmod <- lm(TARGET_WINS ~ ., moneyball_training_data)
+standard_res <- rstandard(lmod)
+
+for (predictor in colnames(moneyball_training_data[-1])){
+  plot(na.omit(moneyball_training_data)[[predictor]],
+       standard_res,
+       xlab = predictor,
+       ylab = "standardized_residuals")
+}
+
+```
+
+The plot for `TEAM_BATTING_2B` doesn't look random. It looks like that there is an outlier to the left of the plot. It's hard to tell if the other plots follow a pattern or not...
+
+```{r}
+plot(na.omit(moneyball_training_data)$TARGET_WINS, predict(lmod), xlab = 'y', ylab = 'y_hat')
+abline(a = 0, b = 1)
+```
+```{r}
+sumary(lmod)
+plot(lmod)
+```
+
+The fitted values plot above indicates that $Y$ and $\hat{Y}$ might not be linearly related. It looks like the slope should be less and the y-intercept should be higher... We therefore should do a Box-Cox transformation to overcome this nonlinearity.
+
+```{r}
+
+```
+
+Let's try the simple backward and forward elimination
+
+```{r}
+step.model <- stepAIC(lmod, direction = "both", trace = FALSE)
+summary(step.model)
+
+step.model <- stepAIC(lmod, direction = "forward", trace = FALSE)
+summary(step.model)
+
+step.model <- stepAIC(lmod, direction = "backward", trace = FALSE)
+summary(step.model)
+```
+
+```{r}
+
+modified_moneyball_training_data <- data.frame(na.omit(moneyball_training_data))
+powerTransform(modified_moneyball_training_data)
+
+```
+
+```{r}
+lmod <- lm(TARGET_WINS ~ TEAM_BATTING_3B + )
+```
