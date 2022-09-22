@@ -24,7 +24,7 @@ library(caret)
 ## Load Data
 
 ```{r results=FALSE, message=FALSE}
-data <- read_csv("../data/moneyball-training-data.csv")
+data <- read_csv("../data/moneyball-evaluation-data.csv")
 ```
 
 ## Part 1 - Data Exploration
@@ -47,11 +47,26 @@ summary(data)
 ```
 
 ```{r}
+
+# run this for training data
+
 new_cols <- c("index", "target", "bat_h", "bat_2b", "bat_3b", "bat_hr", "bat_bb", "bat_so", "bas_sb", "bas_cs", "bat_hbp", "p_h", "p_hr", "p_bb", "p_so", "f_e", "f_dp"
 )
 
 colnames(data) <- new_cols
 ```
+
+
+```{r}
+
+# run this for evaluation data
+
+new_cols <- c("index", "bat_h", "bat_2b", "bat_3b", "bat_hr", "bat_bb", "bat_so", "bas_sb", "bas_cs", "bat_hbp", "p_h", "p_hr", "p_bb", "p_so", "f_e", "f_dp"
+)
+
+colnames(data) <- new_cols
+```
+
 
 
 Looking at distributions
@@ -166,7 +181,7 @@ ggplot(stack(data), aes(x = ind, y = values)) +
   geom_boxplot()
 ```
 
-bat_h: most hits by batter in a season is 1783, so anything over should be removed or imputed
+bat_h: most hits by team in a season is 1783, so anything over should be removed or imputed
 https://www.baseball-almanac.com/recbooks/hits_records_mlb_teams.shtml
 
 We can replace these values with the median for the column
@@ -223,6 +238,13 @@ replace_median <- median(data$p_bb[(data$p_bb < upper_limit) | (data$p_bb > lowe
 
 data$p_bb[(data$p_bb > upper_limit) | (data$p_bb < lower_limit)] <- replace_median
 
+```
+
+
+
+### Export clean data for team use
+```{r}
+write.csv(data, "clean_eval.csv")
 ```
 
 
