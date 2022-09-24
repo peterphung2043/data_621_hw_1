@@ -3,10 +3,10 @@ title: "Final_1"
 author: "Krutika Patel"
 date: '2022-09-23'
 output:
-  html_document: default
   pdf_document: default
+  html_document: default
 ---
-```{r echo = FALSE, setup, knitr::all_labels(), echo=TRUE, results='hide', warning=FALSE, message=FALSE }
+```{r  setup, knitr::all_labels(), echo=FALSE, results='hide', warning=FALSE, message=FALSE }
 knitr::opts_chunk$set(echo = TRUE, class.source = "codechunk")
 
 library(RCurl)
@@ -26,10 +26,10 @@ suppressPackageStartupMessages(library(tidyverse))
 
 
 # Importing the datasets
-```{r training data echo = FALSE}
+```{r echo = FALSE}
 #import dataset: moneyball_evaluation_data
-#my_git_url <- getURL("https://raw.githubusercontent.com/AhmedBuckets/SPS621/main/moneyball-training-data.csv")
-raw_data<- as.data.frame(read.csv('moneyball-training-data.csv'))
+my_git_url <- getURL("https://raw.githubusercontent.com/AhmedBuckets/SPS621/main/moneyball-training-data.csv")
+raw_data<- read.csv(text = my_git_url)
 ```
 
 
@@ -82,18 +82,6 @@ training_data  %>%
 
 ```
 
-
-# Histograms
-
-Creating a histogram for each of our columns, and using the `facet_wrap function` to separate each column in its own plotting panel:
-
-```{r echo = FALSE}
-#Draw histograms
-ggplot(train_long, 
-       aes(x = log(value))) +
-  geom_histogram(bins = 15) +
-  facet_wrap(name ~ ., scales = "free")
-```
 # Outliers
 
 Another question we had was one of outliers- some of the values were way too high to be realistic of a season of baseball - such as one team having over 20,000 strikeouts. 
@@ -112,6 +100,8 @@ https://www.baseball-almanac.com/recbooks/hits_records_mlb_teams.shtml
 There will be further discussion regarding how we dealt with the outliers on an individual variable basis.
 
 # Data Skew
+Creating a histogram for each of our columns, and using the `facet_wrap function` to separate each column in its own plotting panel:
+
 
 ```{r echo = FALSE}
 training_data %>%
@@ -128,7 +118,7 @@ We can see that some of the variables are skewed to the right or the left like p
 This is an initial exploration of how the variables correlate with wins. In the chart below we can see that some of these variables correlate as we would expect with the number of wins - such as TEAM_BATTING correlating positively with wins. However some of them did not make sense- like TEAM_PITCHING_SO having a negative correlation with wins. We made this chart to get a general idea of how each variable related to the number of wins.  
 
 In this initial exploration it is clear that the outliers in some of the variables are affecting the lines of best fit. When we handle them properly, as well as impute the missing data, these lines will likely change. 
-```{r scatter per variable echo = FALSE}
+```{r echo = FALSE}
 bb_games_melted <- melt(training_data, "TARGET_WINS")
 ggplot(data = bb_games_melted, aes(value, TARGET_WINS)) +
   geom_point() +
