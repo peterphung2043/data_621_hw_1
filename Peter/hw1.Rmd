@@ -12,6 +12,10 @@ require(corrplot)
 require(MASS)
 require(reshape)
 require(car)
+require(dplyr)
+require(mice)
+require(VIM)
+require(stringr)
 rm(list = ls())
 if(!is.null(dev.list()))dev.off()
 ```
@@ -37,19 +41,10 @@ inflation factors
 ## Import Data and Inferential Statistics
 
 ```{r}
-moneyball_training_data <- read.csv("~/Documents/DATA 621/data_621_hw_1/data/moneyball-training-data.csv", colClasses = c("NULL", rep(NA, 16))) + 1
+moneyball_training_data <- read.csv("../data/moneyball-training-data.csv", colClasses = c("NULL", rep(NA, 16)))
 
 summary(moneyball_training_data)
 ```
-So it looks like all of these variables are quantitative. `TEAM_BATTING+HBP` is missing 2085 observations. We might have to delete that variable.
-
-Try replacing the 0 values with really small values(1e-6) which will allow you to perform the Box-Cox transformation.
-
-```{r}
-moneyball_training_data <- subset(moneyball_training_data, select = -c(TEAM_BATTING_HBP))
-
-```
-
 The statistics reveal that several of the observations have NA values:
 
 ```{r}
@@ -60,6 +55,7 @@ We can either ignore these predictors entirely or ignore the observations that c
 
 The statistics show that `TEAM_FIELDING_E`, `TEAM_PITCHING_H`, `TEAM_PITCHING_S0`, `TEAM_PITCHING_SB` have a really high maximum value compared to the median and 3rd quarter.
 
+#### Boxplots
 ```{r}
 for (predictor in colnames(moneyball_training_data)){
   print(ggplot(moneyball_training_data, aes(x = eval(as.name(predictor)))) +
@@ -68,7 +64,7 @@ for (predictor in colnames(moneyball_training_data)){
         xlab(predictor))
 }
 ```
-
+### Response vs. Predictor Plots
 ```{r}
 for (predictor in colnames(moneyball_training_data)){
   print(ggplot(moneyball_training_data, aes(x = eval(as.name(predictor)), y = TARGET_WINS)) +
@@ -77,18 +73,332 @@ for (predictor in colnames(moneyball_training_data)){
 }
 ```
 
+#### Removal of Outliers
+
+- `TEAM_BATTING_H`: most hits by batter in a season is 1783, so anything over should be removed or imputed
+https://www.baseball-almanac.com/recbooks/hits_records_mlb_teams.shtml
+
+- `TEAM_PITCHING_H`: most hits by batter in a season is 1783, so anything over should be removed or imputed
+https://www.baseball-almanac.com/recbooks/hits_records_mlb_teams.shtml
+
+- `TEAM_PITCHING_SO`: most strikeouts in a season is 1595 so anything above this should be removed or imputed
+https://www.baseball-almanac.com/recbooks/rb_strike2.shtml
+
+- `TEAM_FIELDING_E`: most errors in a season is 886, anything above this should be removed or imputed
+https://www.baseball-fever.com/forum/general-baseball/statistics-analysis-sabermetrics/2403-team-errors-in-a-season
+
+# ```{r}
+# moneyball_training_data <- filter(moneyball_training_data, TEAM_BATTING_H < 1783 & TEAM_PITCHING_H < 1783 & TEAM_PITCHING_SO < 1595 & TEAM_FIELDING_E < 886)
+# ```
+
+#### Create Saber Feature
+
+Saber Model
+
+Sabermetrics has become the rage in baseball, actually popularized by Billy Beane and the data set we are exploring. As a result, we built a model that centers around one of these advance analytics known as BsR or base runs. This statistic (designed by David Smyth in the 1990’s) estimates the amount of runs a team SHOULD score, adding an intriguing element to a data set which does not include runs (see http://tangotiger.net/wiki_archive/Base_Runs.html for more information). The formula For BsR is as follows:
+
+BSR = A*B/(B+A)+C where:
+
+A = TEAM_BATTING_1B + TEAM_BATTING_2B + TEAM_BATTING_3B + TEAM_BATTING_BB
+
+B = 1.02(1.4TEAM_TOTAL_BASES -0.6TEAM_BATTING_H + 0.1TEAM_BATTING_BB)
+
+C = TEAM_BATTING_HR
+
+Since we eliminate the value of TEAM_BATTING_H, we sum up singles, doubles, triples and home runs in the actual code, and the approach for TEAM_TOTAL_BASES is described in model 2. The data for BSR exhibit a fairly normal distribution.
+
+<!-- ## Alec's Work -->
+
+<!-- ```{r} -->
+
+<!-- data <- read.csv("../data/moneyball-training-data.csv", colClasses = c("NULL", rep(NA, 16))) -->
+
+<!-- # run this for training data -->
+
+<!-- new_cols <- c("target", "bat_h", "bat_2b", "bat_3b", "bat_hr", "bat_bb", "bat_so", "bas_sb", "bas_cs", "bat_hbp", "p_h", "p_hr", "p_bb", "p_so", "f_e", "f_dp" -->
+<!-- ) -->
+
+<!-- colnames(data) <- new_cols -->
+<!-- ``` -->
+
+<!-- ### Create Saber Feature -->
+
+<!-- Saber Model -->
+
+<!-- Sabermetrics has become the rage in baseball, actually popularized by Billy Beane and the data set we are exploring. As a result, we built a model that centers around one of these advance analytics known as BsR or base runs. This statistic (designed by David Smyth in the 1990’s) estimates the amount of runs a team SHOULD score, adding an intriguing element to a data set which does not include runs (see http://tangotiger.net/wiki_archive/Base_Runs.html for more information). The formula For BsR is as follows: -->
+
+<!-- BSR = A*B/(B+A)+C where: -->
+
+<!-- A = TEAM_BATTING_1B + TEAM_BATTING_2B + TEAM_BATTING_3B + TEAM_BATTING_BB -->
+
+<!-- B = 1.02(1.4TEAM_TOTAL_BASES -0.6TEAM_BATTING_H + 0.1TEAM_BATTING_BB) -->
+
+<!-- C = TEAM_BATTING_HR -->
+
+<!-- Since we eliminate the value of TEAM_BATTING_H, we sum up singles, doubles, triples and home runs in the actual code, and the approach for TEAM_TOTAL_BASES is described in model 2. The data for BSR exhibit a fairly normal distribution. -->
+
+
+
+<!-- ```{r} -->
+<!-- data$bat_1b <- data$bat_h - data$bat_2b - data$bat_3b - data$bat_hr -->
+<!-- data$total_bases <- data$bat_1b + 2*data$bat_2b + 3*data$bat_3b + 4*data$bat_hr -->
+
+
+<!-- A <- data$bat_h -->
+<!-- B <- 1.02*(1.4*data$total_bases -0.6*data$bat_h + 0.1*data$bat_bb) -->
+<!-- C <- data$bat_hr -->
+
+<!-- data$saber <- A*B/(B+A)+C -->
+<!-- ``` -->
+
+<!-- ### Analysis of Variables -->
+
+<!-- bat_h: most hits by team in a season is 1783, so anything over should be removed or imputed -->
+<!-- https://www.baseball-almanac.com/recbooks/hits_records_mlb_teams.shtml -->
+
+<!-- We can replace these values with the median for the column -->
+
+<!-- ```{r} -->
+<!-- data$bat_h[data$bat_h > 1783] <- median(data$bat_h[data$bat_h <= 1783]) -->
+<!-- ``` -->
+
+
+<!-- p_h: if the most hits for a team is 1783, then the most hits allowed should be the same -->
+<!-- https://www.baseball-almanac.com/recbooks/hits_records_mlb_teams.shtml -->
+
+<!-- However this is not proven. We can also use interquartile range approach. -->
+
+
+<!-- ```{r} -->
+<!-- Q1 <- quantile(data$p_h, probs=.25) -->
+<!-- Q3 <- quantile(data$p_h, probs=.75) -->
+<!-- iqr = Q3-Q1 -->
+<!-- upper_limit = Q3 + (iqr*1.5) -->
+<!-- lower_limit = Q1 - (iqr*1.5) -->
+<!-- replace_median <- median(data$p_h[(data$p_h < upper_limit) | (data$p_h > lower_limit)]) -->
+
+<!-- data$p_h[(data$p_h > upper_limit) | (data$p_h < lower_limit)] <- replace_median -->
+
+<!-- ``` -->
+
+
+<!-- p_so: most strikeouts in a season is 1595 so anything above this should be removed or imputed -->
+<!-- https://www.baseball-almanac.com/recbooks/rb_strike2.shtml -->
+
+<!-- ```{r} -->
+<!-- data$p_so[data$p_so > 1595] <- median(data$p_so[data$p_so <= 1595]) -->
+<!-- ``` -->
+
+
+<!-- f_e: most errors in a season is 886, anything above this should be removed or imputed -->
+<!-- https://www.baseball-fever.com/forum/general-baseball/statistics-analysis-sabermetrics/2403-team-errors-in-a-season -->
+
+<!-- ```{r} -->
+<!-- data$f_e[data$f_e > 886] <- median(data$f_e[data$f_e <= 886]) -->
+<!-- ``` -->
+
+
+<!-- p_bb: can't find data on this. We can use the interquartile approach -->
+
+<!-- ```{r} -->
+<!-- Q1 <- quantile(data$p_bb, probs=.25) -->
+<!-- Q3 <- quantile(data$p_bb, probs=.75) -->
+<!-- iqr = Q3-Q1 -->
+<!-- upper_limit = Q3 + (iqr*1.5) -->
+<!-- lower_limit = Q1 - (iqr*1.5) -->
+<!-- replace_median <- median(data$p_bb[(data$p_bb < upper_limit) | (data$p_bb > lower_limit)]) -->
+
+<!-- data$p_bb[(data$p_bb > upper_limit) | (data$p_bb < lower_limit)] <- replace_median -->
+
+<!-- ``` -->
+
+
+
+
+<!-- ```{r} -->
+<!-- cleaned_train$bat_1b <- data$bat_h - data$bat_2b - data$bat_3b - data$bat_hr -->
+<!-- cleaned_train$total_bases <- data$bat_1b + 2*data$bat_2b + 3*data$bat_3b + 4*data$bat_hr -->
+
+
+<!-- A <- data$bat_h -->
+<!-- B <- 1.02*(1.4*data$total_bases -0.6*data$bat_h + 0.1*data$bat_bb) -->
+<!-- C <- data$bat_hr -->
+
+<!-- data$saber <- A*B/(B+A)+C -->
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+
+<!-- cleaned_train <- read.csv("../Alec/clean_train.csv") -->
+
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- for (predictor in colnames(moneyball_training_data)){ -->
+<!--   print(ggplot(moneyball_training_data, aes(x = eval(as.name(predictor)), y = TARGET_WINS)) + -->
+<!--         geom_point() + -->
+<!--         xlab(predictor)) -->
+<!-- } -->
+<!-- ``` -->
+
+#### Histograms
 ```{r}
 ggplot(data = melt(moneyball_training_data, "TARGET_WINS"), aes(value)) +
   geom_histogram() +
   facet_wrap(.~variable, scales = "free")
 ```
 
+#### Bimodal Predictor Variables
+
 Create two models, one with the bimodal data, and one without the bimodal data. So it looks like `TEAM_BATTING_HR`, `TEAM_BATTING_SO`, and `TEAM_PITCHING_HF`. But let's continue...
 
+### Variable Selection
+
+In total there are 6 columns with missing values:
+
+- Strikeouts by batters (5%)
+Highly unlikely, should use median or regression model for imputation
+
+- Stolen bases (6%) bas_sb
+stolen bases weren’t tracked officially until 1887, so some of the missing data could be from 1871-1886. We could impute those values using the median or regression model.
+
+- Caught stealing (34%) bas_cs
+This statistic was not tracked until 1951. We might have to ignore this variable
+
+- Batter hit by pitch (92%)
+Replace with 0
+
+- Strikeouts by pitchers (4%)
+highly unlikely, should use median or regression model for imputation
+
+- Double plays (12%)
+highly unlikely, should use median or regression model for imputation
+
+
+### Quantifying Correlation for Predictor Variables
+
+We generate the correlation plot as shown below. 
 ```{r}
-corrplot(cor(moneyball_training_data[-1]), method = 'circle')
+corrplot(cor(moneyball_training_data, use = "na.or.complete"), method = 'number', type = 'lower', diag = FALSE, number.cex = 0.5, tl.cex = 0.5)
 ```
 
+The variables with 1 are highly correlated with one another. The variance inflation factor for these variables is also extremely high (Go to "Linear Model with all Predictors" section.)
+
+### Notes on Missing Values
+
+[This link](https://pressbooks.library.upei.ca/montelpare/chapter/working-with-missing-data/) points out that if less than 5% of the data is missing, than it is okay to ignore the data.
+
+[This link](https://datascienceplus.com/imputing-missing-data-with-r-mice-package/) points out that if more than 5% of the data is missing, than we might have to leave the variable out. But I don't think that is necessarily the right thing to do...However, too much missing data will introduce bias which will throw off our predictions... This link also says:
+
+"The mice package in R, helps you imputing missing values with plausible data values. These plausible values are drawn from a distribution specifically designed for each missing datapoint."
+
+[This link](https://imaging.mrc-cbu.cam.ac.uk/statswiki/FAQ/missing) says that we can impute by the means/medians if the missing values only account for 5% of the sample. Peng et al.(2006) suggest that mean imputation is permissible only if no more than 20% of the data is missing. I think we should impute because it uses a distribution, so the prediction is more robust. We can use the [MICE package](https://bookdown.org/mwheymans/bookmi/multiple-imputation.html).
+
+[3 problems with mean imputation](https://blogs.sas.com/content/iml/2017/12/06/problems-mean-imputation.html)
+
+[Unconditional mean imputation](https://stats.oarc.ucla.edu/sas/seminars/multiple-imputation-in-sas/mi_new_1/) results in an artificial reduction in variability due to the fact that you are imputing values at the center of the variable's distribution. Also see this: [3 problems with mean imputation](https://blogs.sas.com/content/iml/2017/12/06/problems-mean-imputation.html)
+
+We'll probably use predictive mean matching "pmm" because it is [good for quantitative variables](https://stefvanbuuren.name/fimd/sec-pmm.html). Mice circumvents the shrinking of errors by using multiple regression models. The variability in the different imputed values gives us a higher, but more correct standard error. Uncertainty is inherent in imputation so we are accounting for it through multiple imputed values [(Source)](https://statisticsglobe.com/predictive-mean-matching-imputation-method/).
+
+As long as the dataset is large enough, we can use MICE's PMM. Also:
+
+"Another simulation study that addressed skewed data concluded that predictive mean matching 'may be the preferred approach provided that less than 50% of the cases have missing data and the missing data are not MNAR' (Marshall et al. 2010)" [(Source)](https://stefvanbuuren.name/fimd/sec-pmm.html)
+
+One of the variables is missing 34% (`TEAM_BASERUN_CS`). Let's create two models.
+One with this variable kept in and imputed. Another with this variable taken out. If the P-values are low for both models, we can than use the evaluation data and see which model has the lower RMSE...
+
+[Multiple Imputation in R - Multiple imputation doesn't like variables that are highly correlated with each other](https://data.library.virginia.edu/getting-started-with-multiple-imputation-in-r/). We might have to take out some of the highly correlated variables...But taking out the highly correlated variables means that we might be leaving out some important information inherent in the data...So we might do a linear combination of the correlated variables in order to reduce the correlation....
+
+I think that we should transform to a normal distribution first using Box-Cox, and then impute. And then we can fit various models (one with the collinear variables, one without), and then evaluate their performance using the RMSE.
+
+### Using MICE
+
+Mainly following this in order to impute missing data: https://datascienceplus.com/imputing-missing-data-with-r-mice-package/
+
+**Note that at this step, we have taken out the outliers.**
+```{r}
+pMiss <- function(x){sum(is.na(x))/length(x)*100}
+apply(moneyball_training_data, 2, pMiss)
+```
+
+The output above shows the percentage of missing data for each variable.
+
+`TEAM_BATTING_HBP` is missing almost 90% of its data. I think that I will take it out and store the new data frame as `modified_training_data`.
+```{r}
+modified_training_data <- subset(moneyball_training_data, select = -c(TEAM_BATTING_HBP))
+```
+
+#### Using MICE to Look at Missing Data Patterns
+
+```{r, fig.width = 12, fig.height = 8}
+aggr_plot <- aggr(moneyball_training_data, col=c('navyblue','red'), numbers=TRUE, sortVars=TRUE, labels=names(moneyball_training_data),
+                  cex.axis=.40, gap=0, ylab=c("Histogram of missing data","Pattern"))
+```
+So it looks like 67.98% of the observations is missing just the `TEAM_BATTING_HBP` predictor, 17.08% of the observations are missing the `TEAM_BATTING_HBP` and `TEAM_BASERUN_CS` predictors. 10.77% of the observations are NOT missing any data. 4.06% of the observations are missing the `TEAM_BATTING_HBP`, `TEAM_BASERUN_CS`, and `TEAM_FIELDING_DP` predictors...and so on and so forth. A useful plot.
+
+```{r, fig.width = 12, fig.height = 8}
+aggr_plot <- aggr(modified_training_data, col=c('navyblue','red'), numbers=TRUE, sortVars=TRUE, labels=names(modified_training_data),
+                  cex.axis=.40, gap=0, ylab=c("Histogram of missing data","Pattern"))
+```
+The plot above shows that 78.75% of the observations have no NAs in any of the predictors and responses after taking out the `TEAM_BATTING_HBP` predictor.
+
+#### Imputing the Missing Data Using MICE
+
+
+```{r}
+temp_data <- mice(modified_training_data,m=10,maxit=50,meth='pmm',seed=500)
+summary(temp_data)
+```
+
+```{r}
+complete_data <- complete(temp_data,1)
+```
+
+#### Inspecting the Distribution of Original and Imputed Data
+
+```{r}
+xyplot(temp_data,TARGET_WINS ~ TEAM_BASERUN_SB+TEAM_BASERUN_CS+TEAM_FIELDING_DP,pch=18,cex=1)
+densityplot(temp_data)
+```
+
+```{r}
+ggplot(data = melt(complete_data, "TARGET_WINS"), aes(value)) +
+  geom_histogram() +
+  facet_wrap(.~variable, scales = "free")
+```
+
+`TEAM_BATTING_3B`, `TEAM_BASERUN_SB`, `TEAM_BASERUN_CS`, `TEAM_FIELDING_E` should be transformed using Box-Cox because of their skewness.
+
+### Box-Cox Transformation
+
+Try replacing the 0 values with really small values(1e-6) which will allow you to perform the Box-Cox transformation.
+
+```{r}
+complete_data[complete_data == 0] <- 1e-6
+```
+
+After we use `powerTransform` to do the Box-Cox transformation, we than delete the original columns from `complete_data` using the `select` function from dplyr. Than use the `cbind` function to append the `transformed_data` to the `complete_data`. 
+
+```{r}
+
+skewed_vars <- "TEAM_BATTING_3B, TEAM_BASERUN_SB, TEAM_BASERUN_CS, TEAM_FIELDING_E"
+
+lambdas <- powerTransform(eval(parse(text = paste("cbind(",skewed_vars,")", "~ 1"))), complete_data)
+
+transformed_data <- bcPower(lambdas$y, coef(lambdas))
+
+complete_data <- cbind(subset(complete_data, select = eval(parse(text = paste("-c(", skewed_vars, ")")))),
+                       transformed_data)
+```
+
+```{r}
+ggplot(data = melt(complete_data, "TARGET_WINS"), aes(value)) +
+  geom_histogram() +
+  facet_wrap(.~variable, scales = "free")
+```
+
+### Linear Model with all Predictors
 
 Top of page 158 in A Modern Approach to Regression describes the following for an example on food prices:
 
@@ -97,6 +407,8 @@ Top of page 158 in A Modern Approach to Regression describes the following for a
 Therefore, let's assume that we have a linear model fitting all of the predictors and view the plots of standardized residuals against all of the predictors.
 
 Note that when using all of the variables, observations with any NAs are omitted.
+
+
 ```{r}
 
 lmod <- lm(TARGET_WINS ~ ., moneyball_training_data)
@@ -109,45 +421,121 @@ for (predictor in colnames(moneyball_training_data[-1])){
        ylab = "standardized_residuals")
 }
 
-```
+summary(lmod)
+plot(lmod)
 
-The plot for `TEAM_BATTING_2B` doesn't look random. It looks like that there is an outlier to the left of the plot. It's hard to tell if the other plots follow a pattern or not...
+vif(lmod)
 
-```{r}
 plot(na.omit(moneyball_training_data)$TARGET_WINS, predict(lmod), xlab = 'y', ylab = 'y_hat')
 abline(a = 0, b = 1)
-```
-```{r}
-sumary(lmod)
-plot(lmod)
-```
 
-The fitted values plot above indicates that $Y$ and $\hat{Y}$ might not be linearly related. It looks like the slope should be less and the y-intercept should be higher... We therefore should do a Box-Cox transformation to overcome this nonlinearity.
-
-```{r}
-
-```
-
-Let's try the simple backward and forward elimination
-
-```{r}
 step.model <- stepAIC(lmod, direction = "both", trace = FALSE)
 summary(step.model)
-
-step.model <- stepAIC(lmod, direction = "forward", trace = FALSE)
-summary(step.model)
-
-step.model <- stepAIC(lmod, direction = "backward", trace = FALSE)
-summary(step.model)
 ```
+The fitted values plot above indicates that $Y$ and $\hat{Y}$ might not be linearly related. It looks like the slope should be less and the y-intercept should be higher... We therefore should do a Box-Cox transformation to overcome this nonlinearity.
 
+### Linear Model with Modified Data after Removal of Outliers, Box Cox Transformation, and Removal of Variables with more than 50% of Missing Data
 ```{r}
+lmod <- lm(TARGET_WINS ~ ., complete_data)
+standard_res <- rstandard(lmod)
 
-modified_moneyball_training_data <- data.frame(na.omit(moneyball_training_data))
-powerTransform(modified_moneyball_training_data)
+for (predictor in colnames(complete_data[-1])){
+  plot(na.omit(complete_data)[[predictor]],
+       standard_res,
+       xlab = predictor,
+       ylab = "standardized_residuals")
+}
 
+summary(lmod)
+plot(lmod)
+
+vif(lmod)
+
+plot(na.omit(complete_data)$TARGET_WINS, predict(lmod), xlab = 'y', ylab = 'y_hat')
+abline(a = 0, b = 1)
+
+step.model <- stepAIC(lmod, direction = "both", trace = FALSE)
+summary(step.model)
 ```
+#### Using Evaluation Data to Determine RMSE
 
+TBD
+
+
+<!-- #### Dealing with Bimodal Variables -->
+
+<!-- ```{r} -->
+<!-- library(mixtools) -->
+<!-- bimodal_var <- "TEAM_BATTING_SO" -->
+<!-- bimodal_var_data <-  complete_data[,bimodal_var] -->
+<!-- mixmdl = normalmixEM(bimodal_var_data) -->
+
+<!-- mu_1 = mixmdl$mu[1] -->
+<!-- mu_2 = mixmdl$mu[2] -->
+
+<!-- sigma_1 = mixmdl$sigma[1] -->
+<!-- sigma_2 = mixmdl$sigma[2] -->
+
+<!-- histogram_intersection <- function(mu_1, mu_2, sigma_1, sigma_2){ -->
+<!--   if (sigma_1 == sigma_2) stop('Both Sigmas are the same. Get 1/0') -->
+<!--   (mu_2*(sigma_1^2) - sigma_2*(mu_1*sigma_2 + sigma_1*sqrt((mu_1 - mu_2)^2 + 2*(sigma_1^2 -      sigma_2^2)*log(sigma_1/sigma_2))))/(sigma_1^2 - sigma_2^2) -->
+<!-- } -->
+
+<!-- cutoff <- histogram_intersection(mu_1, mu_2, sigma_1, sigma_2) -->
+
+<!-- plot(mixmdl,which=2) -->
+<!-- lines(density(bimodal_var_data), lty=2, lwd=2) -->
+<!-- abline(v = cutoff) -->
+<!-- ``` -->
+
+<!-- [Equation for where 2 normal distributions overlap](https://stats.stackexchange.com/questions/103800/calculate-probability-area-under-the-overlapping-area-of-two-normal-distributi) -->
+
+<!-- Now we create a new categorical variable, `bi_TEAM_BATTING_SO`, where the values that exceed the `cutoff` get a value of 0 and the values below get a value of 1. Than this is converted into a factor using the `factor` function. -->
+
+<!-- ```{r} -->
+<!-- complete_data$bi_TEAM_BATTING_SO <- factor((complete_data$TEAM_BATTING_SO < cutoff) * 1) -->
+<!-- summary(complete_data) -->
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- ggplot(data = melt(complete_data, "TARGET_WINS"), aes(value)) + -->
+<!--   geom_histogram() + -->
+<!--   facet_wrap(.~variable, scales = "free") -->
+<!-- ``` -->
+
+### Modeling After Dealing with Bimodal Variables
 ```{r}
-lmod <- lm(TARGET_WINS ~ TEAM_BATTING_3B + )
+lmod <- lm(TARGET_WINS ~ ., complete_data)
+standard_res <- rstandard(lmod)
+
+for (predictor in colnames(complete_data[-1])){
+  plot(na.omit(complete_data)[[predictor]],
+       standard_res,
+       xlab = predictor,
+       ylab = "standardized_residuals")
+}
+
+summary(lmod)
+plot(lmod)
+
+vif(lmod)
+
+plot(na.omit(complete_data)$TARGET_WINS, predict(lmod), xlab = 'y', ylab = 'y_hat')
+abline(a = 0, b = 1)
 ```
+
+<!-- #### Importing Evaluation Data -->
+
+<!-- ```{r} -->
+<!-- moneyball_evaluation_data <- read.csv("~/Documents/DATA 621/data_621_hw_1/data/moneyball-evaluation-data.csv", colClasses = c("NULL", rep(NA, 16))) -->
+
+<!-- summary(moneyball_evaluation_data) -->
+<!-- ``` -->
+
+<!-- # Transform Test data using Box Cox that was used for Training -->
+<!-- ```{r} -->
+
+<!-- bcPower(subset(moneyball_evaluation_data, select = eval(parse(text = paste("c(", skewed_vars, ")")))), lambdas$lambda) -->
+
+<!-- ``` -->

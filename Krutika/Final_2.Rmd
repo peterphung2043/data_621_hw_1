@@ -7,6 +7,8 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+rm(list = ls())
+if(!is.null(dev.list()))dev.off()
 ```
 
 ```{r}
@@ -17,12 +19,12 @@ suppressPackageStartupMessages(library(tidyverse))
 Importing the datasets
 ```{r eval-load, eval=FALSE}
 #import dataset: moneyball_evaluation_data
-eval <- read_csv("moneyball-evaluation-data.csv")
+eval <- read.csv("moneyball-evaluation-data.csv")
 ```
 
 ```{r train-load, eval=FALSE}
 #import dataset: moneyball_training_data
-train <- read_csv("moneyball-training-data.csv")
+train <- read.csv("moneyball-training-data.csv")
 ```
 
 ```{r}

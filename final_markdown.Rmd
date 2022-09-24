@@ -1,6 +1,8 @@
 ---
 title: "DATA 621 - Homework 1"
-output: html_document
+output:
+  html_document: default
+  word_document: default
 date: '2022-09-10'
 ---
 
@@ -16,3 +18,50 @@ rm(list = ls())
 if(!is.null(dev.list()))dev.off()
 ```
 
+### Variable Selection
+
+Data exploration revealed the presence of multiple missing values for 6 of the predictors. Table XX shows these predictors and the percentage of missing values relative to the predictor.
+
+```{r table1, echo=FALSE, message=FALSE, warnings=FALSE, results='asis'}
+tabl <- "
+|Variable|Description|Missing Data (%)|
+|---------------|:-------------:|-------------:|
+|`TEAM_BATTING_SO`|Strikeouts by batters|5|
+|`TEAM_BASERUN_SB`|Stolen bases|6|
+|`TEAM_BASERUN_CS`|Caught stealing|34|
+|`TEAM_BATTING_HBP`|Batters hit by pitch (get a free base)|92|
+|`TEAM_PITCHING_SO`|Strikeouts by pitchers|4|
+|`TEAM_FIELDING_DP`|Double Plays|12|
+"
+cat(tabl) # output the table in a format good for HTML/PDF/docx conversion
+```
+
+It is important to note that stolen bases and caught stealing were not officially tracked until 1887. Records in the dataset date back to 1871; which implies some of the missing data for `TEAM_BATTING_SB` and `TEAM_BASERUN_CS` could be from 1871 to 1886.
+
+### Outliers
+
+Baseball Almanac shows that the record for team batter hits in a season is 1,783 for the Philadelphia Phillies in 1930. The dataset contains several observations where `TEAM_BATTING_H`, the base hits by batters, is above 1,783. Therefore, observations where `TEAM_BATTING_H` is above 1, 783 were removed. Several other variables with similar outliers are documented in Table XX shown below. Observations exceeding the records were removed and each record is by a seasonal basis.
+
+```{r table2, echo=FALSE, message=FALSE, warnings=FALSE, results='asis'}
+tabl <- "
+|Variable|Indication of Outliers|
+|---------------|:-------------:|
+|`TEAM_BATTING_H`|Record for team batter hits is 1,783|
+|`TEAM_PITCHING_H`|Record for team batter hits is 1,783|
+|`TEAM_PITCHING_SO`|Record for strikeouts is 1,595|
+|`TEAM_FIELDING_E`|Record for errors is 886|
+"
+cat(tabl) # output the table in a format good for HTML/PDF/docx conversion
+```
+
+
+### Works Cited
+Stolen bases: https://en.wikipedia.org/wiki/Stolen_base
+
+Hits records for MLB teams: https://www.baseball-almanac.com/recbooks/hits_records_mlb_teams.shtml
+
+Strikeout records set by MLB teams:
+https://www.baseball-almanac.com/recbooks/rb_strike2.shtml
+
+Team errors in a season:
+https://www.baseball-fever.com/forum/general-baseball/statistics-analysis-sabermetrics/2403-team-errors-in-a-season
