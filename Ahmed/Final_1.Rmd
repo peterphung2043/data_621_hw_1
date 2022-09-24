@@ -4,10 +4,17 @@ author: "Krutika Patel"
 date: '2022-09-23'
 output: html_document
 ---
+```{r setup, knitr::all_labels(), echo=TRUE, results='hide', warning=FALSE, message=FALSE }
+knitr::opts_chunk$set(echo = TRUE, class.source = "codechunk")
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+library(RCurl)
+library(tidyr)
+library(dplyr) 
+library(RCurl)
+library(ggplot2)
+library(reshape2)
 ```
+
 
 # 1 Data Exploration
 
@@ -17,30 +24,28 @@ suppressPackageStartupMessages(library(tidyverse))
 
 
 # Importing the datasets
-```{r training data, eval=FALSE}
+```{r training data}
 #import dataset: moneyball_evaluation_data
 my_git_url <- getURL("https://raw.githubusercontent.com/AhmedBuckets/SPS621/main/moneyball-training-data.csv")
-training_data<- read.csv(text = my_git_url)
+raw_data<- read.csv(text = my_git_url)
 ```
 
 
 
 # Viewing Data
 ```{r}
-head(training_data)
+head(raw_data)
 ```
 
 
 # Column Names
 ```{r}
-as.data.frame(colnames(training_data))
+as.data.frame(colnames(raw_data))
 ```
 
 # Data Subset
 ```{r}
-#remove/separate index column from dataset
-training_data <- subset(training_data, select = -INDEX)
-eval_index <- eval$INDEX
+training_data <- subset(raw_data, select = -INDEX)
 head(training_data)
 ```
 
