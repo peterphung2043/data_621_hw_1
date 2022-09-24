@@ -11,114 +11,80 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r eval-load, eval=FALSE}
 #import dataset: moneyball_evaluation_data
-eval <- read_csv("moneyball-evaluation-data.csv")
+original <- read_csv("../data/moneyball-training-data.csv")
+original <- subset(original, select = -INDEX)
+train <- read_csv("../data/final_clean_train.csv")
+eval <- read_csv("../data/final_clean_eval.csv")
 ```
 
-```{r train-load, eval=FALSE}
-#import dataset: moneyball_training_data
-train <- read_csv("moneyball-training-data.csv")
+
+```{r}
+data <- train
 ```
 
 ```{r}
 
 # run this for training data
 
-new_cols <- c("index", "target", "bat_h", "bat_2b", "bat_3b", "bat_hr", "bat_bb", "bat_so", "bas_sb", "bas_cs", "bat_hbp", "p_h", "p_hr", "p_bb", "p_so", "f_e", "f_dp"
+new_cols <- c("target", "bat_h", "bat_2b", "bat_3b", "bat_hr", "bat_bb", "bat_so", "bas_sb", "bas_cs", "bat_hbp", "p_h", "p_hr", "p_bb", "p_so", "f_e", "f_dp"
 )
 
-colnames(train) <- new_cols
-```
-
-
-```{r}
-
-# run this for evaluation data
-
-new_cols <- c("index", "bat_h", "bat_2b", "bat_3b", "bat_hr", "bat_bb", "bat_so", "bas_sb", "bas_cs", "bat_hbp", "p_h", "p_hr", "p_bb", "p_so", "f_e", "f_dp"
-)
-
-colnames(eval) <- new_cols
-```
-
-```{r}
-data <- train
+colnames(original) <- new_cols
 ```
 
 
 ### Examine base model, no transformations, no engineering
 
-```{r}
-mdl <- lm(target~., data=data)
-summary(mdl)
-```
+<manually make a model using the clean training data, and hand picking only the original columns>
 
-### Create Saber Feature
+<we can do a subset and exclude all of the new columns>
 
-Saber Model
-
-Sabermetrics has become the rage in baseball, actually popularized by Billy Beane and the data set we are exploring. As a result, we built a model that centers around one of these advance analytics known as BsR or base runs. This statistic (designed by David Smyth in the 1990’s) estimates the amount of runs a team SHOULD score, adding an intriguing element to a data set which does not include runs (see http://tangotiger.net/wiki_archive/Base_Runs.html for more information). The formula For BsR is as follows:
-
-BSR = A*B/(B+A)+C where:
-
-A = TEAM_BATTING_1B + TEAM_BATTING_2B + TEAM_BATTING_3B + TEAM_BATTING_BB
-
-B = 1.02(1.4TEAM_TOTAL_BASES -0.6TEAM_BATTING_H + 0.1TEAM_BATTING_BB)
-
-C = TEAM_BATTING_HR
-
-Since we eliminate the value of TEAM_BATTING_H, we sum up singles, doubles, triples and home runs in the actual code, and the approach for TEAM_TOTAL_BASES is described in model 2. The data for BSR exhibit a fairly normal distribution.
-
+remove bat_1b, total_bases, saber (all columns not in original data)
 
 ```{r}
-data$bat_1b <- data$bat_h - data$bat_2b - data$bat_3b - data$bat_hr
-data$total_bases <- data$bat_1b + 2*data$bat_2b + 3*data$bat_3b + 4*data$bat_hr
-
-
-A <- data$bat_h
-B <- 1.02*(1.4*data$total_bases -0.6*data$bat_h + 0.1*data$bat_bb)
-C <- data$bat_hr
-
-data$saber <- A*B/(B+A)+C
+colnames(data)
 ```
+
+<Here add the model summary, so that we can compare against when we include SABER>
+
+<Add comments>
+
+### Evaluate SABER model
 
 ```{r}
 mdl_inc_saber <- lm(target~., data=data)
-summary(model)
+summary(mdl_inc_saber)
 ```
 
-## First Model - highest correlating features (above 0.2)
+<Add comments>
 
-- total_bases: 0.423
-- saber: 0.395
-- bat_h: 0.353
-- bat_2b: 0.289
-- bat_bb: 0.233
-- bat_1b: 0.217
-- p_bb: 0.204
+## First Model - SABER reduced
 
-### Top features without engineering
+<We need to examine the summary from above (SABER model) and pick all features that have high significance>
+
+<Results might be worse, but the model will be more parsimonious / easily explainable>
+
+<Add comments>
+
+
+### Ahmeds "Human Intuition Model"
+
+<Write code to edit column names to make sure it matches alec's column names>
+
+<Investigate what the ...1 is>
+
 
 ```{r}
-mdl_tf <- lm(target~ bat_h + bat_2b + bat_bb + bat_1b + p_bb, data=data)
+model <- lm(target ~ bat_h + bat_2b + bat_3b + bat_so + bas_sb + p_h + f_e, data = data)
+
 summary(model)
 ```
 
-
-### Remove correlating features from feature engineering (just saber)
-
-```{r}
-model <- lm(target~ saber, data=data)
-summary(model)
-```
-
-### Top features including engineering
-
-```{r}
-mdl_tf_fe <- lm(target~ total_bases + saber + bat_h + bat_2b + bat_bb + bat_1b + p_bb, data=data)
-summary(model)
-```
+<Add comments>
 
 ### Step AIC
+
+<make sure to connect base model to this>
 
 ```{r}
 mdl_step.model <- stepAIC(mdl, direction = "both", 
@@ -126,19 +92,23 @@ mdl_step.model <- stepAIC(mdl, direction = "both",
 summary(mdl_step.model)
 ```
 
+<Add comments>
+
 ### Square Root Step AIC
 
 ```{r}
 mdl_sqrt = lm(sqrt(target) ~ .,
                data = data)
-summary(mlr2)
+summary(mdl_sqrt)
 ```
 
 ```{r}
-mdl_sqrt_step.model <- stepAIC(mdl, direction = "both", 
+mdl_sqrt_step.model <- stepAIC(mdl_sqrt, direction = "both", 
                       trace = FALSE)
-summary(mlrstep.model)
+summary(mdl_sqrt_step.model)
 ```
+
+<Add comments>
 
 ### All models
 
@@ -146,4 +116,5 @@ summary(mlrstep.model)
 mdl_all <- olsrr::ols_step_all_possible(model)
 ```
 
+<Add comments>
 

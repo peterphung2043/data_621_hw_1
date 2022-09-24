@@ -1,0 +1,127 @@
+---
+title: "Final_3"
+author: "Krutika Patel"
+date: '2022-09-23'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r eval-load, eval=FALSE}
+#import dataset: moneyball_evaluation_data
+original <- read_csv("../data/moneyball-training-data.csv")
+original <- subset(original, select = -INDEX)
+train <- read_csv("../data/final_clean_train.csv")
+eval <- read_csv("../data/final_clean_eval.csv")
+```
+
+
+```{r}
+data <- train
+```
+
+```{r}
+
+# run this for training data
+
+new_cols <- c("target", "bat_h", "bat_2b", "bat_3b", "bat_hr", "bat_bb", "bat_so", "bas_sb", "bas_cs", "bat_hbp", "p_h", "p_hr", "p_bb", "p_so", "f_e", "f_dp"
+)
+
+colnames(original) <- new_cols
+```
+
+
+#### Create tracker dataframe
+
+<Create an empty dataframe with 2 columns:
+- model name
+- model Adjusted R^2
+- create a utility function that automatically updates the table
+
+### Examine base model, no transformations, no engineering
+
+<manually make a model using the clean training data, and hand picking only the original columns>
+
+<we can do a subset and exclude all of the new columns>
+
+remove bat_1b, total_bases, saber (all columns not in original data)
+
+```{r}
+colnames(data)
+```
+
+<Here add the model summary, so that we can compare against when we include SABER>
+
+<Add comments>
+
+### Evaluate SABER model
+
+```{r}
+mdl_inc_saber <- lm(target~., data=data)
+summary(mdl_inc_saber)
+```
+
+<Add comments>
+
+## First Model - SABER reduced
+
+<We need to examine the summary from above (SABER model) and pick all features that have high significance>
+
+<Results might be worse, but the model will be more parsimonious / easily explainable>
+
+<Add comments>
+
+
+### Ahmeds "Human Intuition Model"
+
+<Write code to edit column names to make sure it matches alec's column names>
+
+<Investigate what the ...1 is>
+
+
+```{r}
+model <- lm(target ~ bat_h + bat_2b + bat_3b + bat_so + bas_sb + p_h + f_e, data = data)
+
+summary(model)
+```
+
+<Add comments>
+
+### Step AIC
+
+<make sure to connect base model to this>
+
+```{r}
+mdl_step.model <- stepAIC(mdl, direction = "both", 
+                      trace = FALSE)
+summary(mdl_step.model)
+```
+
+<Add comments>
+
+### Square Root Step AIC
+
+```{r}
+mdl_sqrt = lm(sqrt(target) ~ .,
+               data = data)
+summary(mdl_sqrt)
+```
+
+```{r}
+mdl_sqrt_step.model <- stepAIC(mdl_sqrt, direction = "both", 
+                      trace = FALSE)
+summary(mdl_sqrt_step.model)
+```
+
+<Add comments>
+
+### All models
+
+```{r}
+mdl_all <- olsrr::ols_step_all_possible(model)
+```
+
+<Add comments>
+

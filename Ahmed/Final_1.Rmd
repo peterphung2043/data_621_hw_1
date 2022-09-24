@@ -15,15 +15,13 @@ library(dplyr)
 library(RCurl)
 library(ggplot2)
 library(reshape2)
+library(corrplot)
 ```
 
 
-# 1 Data Exploration
+# Problem Statement and Goals
 
-```{r echo = FALSE}
-suppressPackageStartupMessages(library(tidyverse))
-```
-
+Our objective is to make a linear regression model that can predict how many wins a baseball team will have in a season based on certain metrics. The variables we have been provided theoretically have positive or negative effects on the total number of wins. We will be exploring this in depth in our research to figure out which variables are correlated the most strongly with the wins, as well as finding out if some of the variables can be consolidated using known conventional baseball-stats algorithms like SABER.
 
 # Importing the datasets
 ```{r echo = FALSE}
@@ -32,38 +30,33 @@ my_git_url <- getURL("https://raw.githubusercontent.com/AhmedBuckets/SPS621/main
 raw_data<- read.csv(text = my_git_url)
 ```
 
+# 1 Data Exploration
 
-
-# Viewing Data
 ```{r echo = FALSE}
-head(raw_data)
+suppressPackageStartupMessages(library(tidyverse))
 ```
 
 
-# Column Names
-```{r echo = FALSE}
-as.data.frame(colnames(raw_data))
-```
+### Viewing Data
 
-# Data Subset
+Upon first glance, the data contains 17 columns. The index column will be ignored for analysis purposes, and so that leaves the other 16. TARGET_WINS is the variable we want to investigate with regards to how well it is correlated with the other columns. To give some context, every row represents a baseball team and its performance during a particular season. TARGET_WINS is the number of wins, and each column after that represents a particular metric for the season. For example, TEAM_BATTING_H represents how many base hits by batters occurred for that team during the season. TEAM_PITCHING_E represents how many times an opposing team made a pitching mistake during the season.
+
 ```{r echo = FALSE}
 training_data <- subset(raw_data, select = -INDEX)
-head(training_data)
-```
-
-
-# Summary Statistics
-Upon first glance, the data contains 17 columns. The index column will be ignored for analysis purposes, and so that leaves the other 16. TARGET_WINS is the variable we want to investigate with regards to how well it is correlated with the other columns. To give some context, every row represents a baseball team and its performance during a particular season. TARGET_WINS is the number of wins, and each column after that represents a particular metric for the season. For example, TEAM_BATTING_H represents how many base hits by batters occurred for that team during the season. TEAM_PITCHING_E represents how many times an opposing team made a pitching mistake during the season. 
-```{r echo = FALSE}
 summary(training_data)
 ```
 
-# NA exploration
+
+<some lines about some of the features that have really high values (otential outliers that we want to look into).
+
+Make a comment about how the target variable has an evenly distributed quartile structure, but appears normal which good...
+
+blah blah>
+
+### NA exploration
+
 As can be seen below, some of the columns have missing values. Contextually, this can be possible because not every metric must have a value- for example it is possible that an entire season can be played without a batter being hit by the pitch. However it is less likely that an entire season can be played without any strikeouts by batters. We did some research and came up with ways to address each of these issues- more on that later. 
 
-```{r echo = FALSE}
-sapply(training_data, function(x) sum(is.na(x)))
-```
 
 ```{r}
 suppressPackageStartupMessages(library("visdat"))
@@ -82,7 +75,11 @@ training_data  %>%
 
 ```
 
-# Outliers
+<@Peter talk about the 6 columsn that are missing values. Allude to what we will do later in section 2.
+
+Talk about how we COULD use medians or means... but why that's bad... MICE>
+
+### Outliers
 
 Another question we had was one of outliers- some of the values were way too high to be realistic of a season of baseball - such as one team having over 20,000 strikeouts. 
 
@@ -91,17 +88,19 @@ Below we can see very quickly that some variables have extreme outliers.
 ```{r echo = FALSE}
 ggplot(stack(training_data), aes(x = ind, y = values)) +
   geom_boxplot() + 
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
 ```
 Some research shows that these outliers could not make sense in a normal baseball season, for example:  
 
-bat_h: most hits by team in a season is 1783, so anything over should be removed or imputed
+TEAM_BATTING_HITS: most hits by team in a season is 1783, so anything over should be removed or imputed
 https://www.baseball-almanac.com/recbooks/hits_records_mlb_teams.shtml
 
 There will be further discussion regarding how we dealt with the outliers on an individual variable basis.
 
-# Data Skew
+### Data Skew
+
+It's important to understand the distributions of each feature. Optimally, we would want to see normal distributions in order to create an effective regression model.
+
 Creating a histogram for each of our columns, and using the `facet_wrap function` to separate each column in its own plotting panel:
 
 
@@ -113,13 +112,14 @@ training_data %>%
     facet_wrap(~ key, scales = "free") +
     geom_histogram()
 ```
-We can see that some of the variables are skewed to the right or the left like p_so. Some of them even have more than one spike like p_h. We will also handle these individually in the data_preparation portion. 
+We can see that some of the variables are skewed to the right or the left like TEAM_PITCHING_SO. Some of them even have more than one spike (bimodal) like TEAM_PITCHING_H. We will also handle these individually in the data_preparation portion. 
 
-# Initial Correlation 
+### Initial Correlation 
 
 This is an initial exploration of how the variables correlate with wins. In the chart below we can see that some of these variables correlate as we would expect with the number of wins - such as TEAM_BATTING correlating positively with wins. However some of them did not make sense- like TEAM_PITCHING_SO having a negative correlation with wins. We made this chart to get a general idea of how each variable related to the number of wins.  
 
 In this initial exploration it is clear that the outliers in some of the variables are affecting the lines of best fit. When we handle them properly, as well as impute the missing data, these lines will likely change. 
+
 ```{r echo = FALSE}
 bb_games_melted <- melt(training_data, "TARGET_WINS")
 ggplot(data = bb_games_melted, aes(value, TARGET_WINS)) +
@@ -128,4 +128,32 @@ ggplot(data = bb_games_melted, aes(value, TARGET_WINS)) +
   geom_smooth(method = "lm")
 
 ```
+
+### Examining Feature Multicollinearity h
+
+```{r}
+corrplot(cor(training_data, use = "na.or.complete"), method = 'number', type = 'lower', diag = FALSE, number.cex = 0.5, tl.cex = 0.5)
+```
+
+< Add text about the features that are highly correlated with eachother. Maybe choose like 3 or 4 and discuss why they either make sense or don't make sense. Allude to how we will use this information in sectinn 3 when we build our models>
+
+@Peter double check what the output is for coffy's corrplot and see if the same features are correlated
+
+# DATA PREPARATION
+
+See FINAL_2 document
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
