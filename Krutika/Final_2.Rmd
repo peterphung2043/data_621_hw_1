@@ -1,0 +1,226 @@
+---
+title: "Final_2"
+author: "Krutika Patel"
+date: '2022-09-23'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+suppressPackageStartupMessages(library(tidyverse))
+```
+
+
+Importing the datasets
+```{r eval-load, eval=FALSE}
+#import dataset: moneyball_evaluation_data
+eval <- read_csv("moneyball-evaluation-data.csv")
+```
+
+```{r train-load, eval=FALSE}
+#import dataset: moneyball_training_data
+train <- read_csv("moneyball-training-data.csv")
+```
+
+```{r}
+
+# run this for training data
+
+new_cols <- c("index", "target", "bat_h", "bat_2b", "bat_3b", "bat_hr", "bat_bb", "bat_so", "bas_sb", "bas_cs", "bat_hbp", "p_h", "p_hr", "p_bb", "p_so", "f_e", "f_dp"
+)
+
+colnames(train) <- new_cols
+```
+
+
+```{r}
+
+# run this for evaluation data
+
+new_cols <- c("index", "bat_h", "bat_2b", "bat_3b", "bat_hr", "bat_bb", "bat_so", "bas_sb", "bas_cs", "bat_hbp", "p_h", "p_hr", "p_bb", "p_so", "f_e", "f_dp"
+)
+
+colnames(eval) <- new_cols
+```
+
+
+In total there are 6 columns with missing values:
+- Strikeouts by batters (5%)
+Highly unlikely, should use median or regression model for imputation
+
+- Stolen bases (6%)
+stolen bases weren’t tracked officially until 1887, so some of the missing data could be from 1871-1886. We could impute those values.
+
+- Caught stealing (34%)
+stolen bases weren’t tracked officially until 1887, so some of the missing data could be from 1871-1886. We could impute those values.
+
+- Batter hit by pitch (92%)
+Replace with 0
+
+- Strikeouts by pitchers (4%)
+highly unlikely, should use median or regression model for imputation
+
+- Double plays (12%)
+highly unlikely, should use median or regression model for imputation
+
+
+We will impute these columns using each's respective median value. We will discard "Batter hit by pitch" due to 92% of entries missing.
+
+
+```{r}
+data$bat_so[is.na(data$bat_so)] <- median(data$bat_so, na.rm = T)
+data$bas_sb[is.na(data$bas_sb)] <- median(data$bas_sb, na.rm = T)
+data$bas_cs[is.na(data$bas_cs)] <- median(data$bas_cs, na.rm = T)
+data$bat_hbp[is.na(data$bat_hbp)] <- 0
+data$p_so[is.na(data$p_so)] <- median(data$p_so, na.rm = T)
+data$f_dp[is.na(data$f_dp)] <- median(data$f_dp, na.rm = T)
+```
+
+
+bat_h: most hits by team in a season is 1783, so anything over should be removed or imputed
+https://www.baseball-almanac.com/recbooks/hits_records_mlb_teams.shtml
+
+We can replace these values with the median for the column
+
+```{r}
+data$bat_h[data$bat_h > 1783] <- median(data$bat_h[data$bat_h <= 1783])
+```
+
+
+p_h: if the most hits for a team is 1783, then the most hits allowed should be the same
+https://www.baseball-almanac.com/recbooks/hits_records_mlb_teams.shtml
+
+However this is not proven. We can also use interquartile range approach.
+
+
+```{r}
+Q1 <- quantile(data$p_h, probs=.25)
+Q3 <- quantile(data$p_h, probs=.75)
+iqr = Q3-Q1
+upper_limit = Q3 + (iqr*1.5)
+lower_limit = Q1 - (iqr*1.5)
+replace_median <- median(data$p_h[(data$p_h < upper_limit) | (data$p_h > lower_limit)])
+
+data$p_h[(data$p_h > upper_limit) | (data$p_h < lower_limit)] <- replace_median
+
+```
+
+
+p_so: most strikeouts in a season is 1595 so anything above this should be removed or imputed
+https://www.baseball-almanac.com/recbooks/rb_strike2.shtml
+
+```{r}
+data$p_so[data$p_so > 1595] <- median(data$p_so[data$p_so <= 1595])
+```
+
+
+f_e: most errors in a season is 886, anything above this should be removed or imputed
+https://www.baseball-fever.com/forum/general-baseball/statistics-analysis-sabermetrics/2403-team-errors-in-a-season
+
+```{r}
+data$f_e[data$f_e > 886] <- median(data$f_e[data$f_e <= 886])
+```
+
+
+p_bb: can't find data on this. We can use the interquartile approach
+
+```{r}
+Q1 <- quantile(data$p_bb, probs=.25)
+Q3 <- quantile(data$p_bb, probs=.75)
+iqr = Q3-Q1
+upper_limit = Q3 + (iqr*1.5)
+lower_limit = Q1 - (iqr*1.5)
+replace_median <- median(data$p_bb[(data$p_bb < upper_limit) | (data$p_bb > lower_limit)])
+
+data$p_bb[(data$p_bb > upper_limit) | (data$p_bb < lower_limit)] <- replace_median
+
+```
+
+
+```{r}
+model <- lm(target~., data=data)
+summary(model)
+```
+
+Certain features exhibit very high outliers. Let's remove outliers and see what happens
+
+```{r}
+outliers <- function(x) {
+
+  Q1 <- quantile(x, probs=.25)
+  Q3 <- quantile(x, probs=.75)
+  iqr = Q3-Q1
+
+ upper_limit = Q3 + (iqr*2.5)
+ lower_limit = Q1 - (iqr*2.5)
+
+ x > upper_limit | x < lower_limit
+}
+
+remove_outliers <- function(df, cols = names(df)) {
+  for (col in cols) {
+    df <- df[!outliers(df[[col]]),]
+  }
+  df
+}
+```
+
+
+```{r}
+ggplot(stack(data), aes(x = ind, y = values)) +
+  geom_boxplot()  + theme(axis.text.x = element_text(angle = 90))
+```
+
+
+Top correlating features:
+- bat_h: 0.389
+- bat_2b: 0.289
+- bat_bb: 0.233
+- p_bb: 0.204
+- p_hr: 0.189
+- bat_hr: 0.176
+- f_e: -0.176
+- bat_3b: 0.143
+
+Looking at the above, more than anything, features related to batting are the highest correlating with the target variable
+
+Things we will want to address:
+- deal with skewed features:
+  - bat_3b
+  - bas_sb
+  - bas_cs
+  - p_h
+  - p_bb
+  - p_so
+  - f_e
+- deal with bimodal features:
+  - bat_hr
+  - p_hr
+
+
+# Data Preparation
+
+b3b
+bs_sb
+bs_cs
+b_hbp
+f_e
+
+Apply log transformation for all skewed features
+
+```{r}
+data$bat_3b <- log(data$bat_3b + 1)
+data$bas_sb <- log(data$bas_sb + 1)
+data$bas_cs <- log(data$bas_cs + 1)
+data$bat_hbp <- log(data$bat_hbp + 1)
+data$f_e <- log(data$f_e + 1)
+
+```
+
+```{r}
+ggplot(stack(data), aes(x = ind, y = values)) +
+  geom_boxplot()
+```
