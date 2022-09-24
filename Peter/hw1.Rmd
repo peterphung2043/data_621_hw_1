@@ -87,25 +87,25 @@ https://www.baseball-almanac.com/recbooks/rb_strike2.shtml
 - `TEAM_FIELDING_E`: most errors in a season is 886, anything above this should be removed or imputed
 https://www.baseball-fever.com/forum/general-baseball/statistics-analysis-sabermetrics/2403-team-errors-in-a-season
 
-# ```{r}
-# moneyball_training_data <- filter(moneyball_training_data, TEAM_BATTING_H < 1783 & TEAM_PITCHING_H < 1783 & TEAM_PITCHING_SO < 1595 & TEAM_FIELDING_E < 886)
-# ```
+```{r}
+moneyball_training_data <- filter(moneyball_training_data, TEAM_BATTING_H < 1783 & TEAM_PITCHING_H < 1783 & TEAM_PITCHING_SO < 1595 & TEAM_FIELDING_E < 886)
+```
 
-#### Create Saber Feature
+<!-- #### Create Saber Feature -->
 
-Saber Model
+<!-- Saber Model -->
 
-Sabermetrics has become the rage in baseball, actually popularized by Billy Beane and the data set we are exploring. As a result, we built a model that centers around one of these advance analytics known as BsR or base runs. This statistic (designed by David Smyth in the 1990’s) estimates the amount of runs a team SHOULD score, adding an intriguing element to a data set which does not include runs (see http://tangotiger.net/wiki_archive/Base_Runs.html for more information). The formula For BsR is as follows:
+<!-- Sabermetrics has become the rage in baseball, actually popularized by Billy Beane and the data set we are exploring. As a result, we built a model that centers around one of these advance analytics known as BsR or base runs. This statistic (designed by David Smyth in the 1990’s) estimates the amount of runs a team SHOULD score, adding an intriguing element to a data set which does not include runs (see http://tangotiger.net/wiki_archive/Base_Runs.html for more information). The formula For BsR is as follows: -->
 
-BSR = A*B/(B+A)+C where:
+<!-- BSR = A*B/(B+A)+C where: -->
 
-A = TEAM_BATTING_1B + TEAM_BATTING_2B + TEAM_BATTING_3B + TEAM_BATTING_BB
+<!-- A = TEAM_BATTING_1B + TEAM_BATTING_2B + TEAM_BATTING_3B + TEAM_BATTING_BB -->
 
-B = 1.02(1.4TEAM_TOTAL_BASES -0.6TEAM_BATTING_H + 0.1TEAM_BATTING_BB)
+<!-- B = 1.02(1.4TEAM_TOTAL_BASES -0.6TEAM_BATTING_H + 0.1TEAM_BATTING_BB) -->
 
-C = TEAM_BATTING_HR
+<!-- C = TEAM_BATTING_HR -->
 
-Since we eliminate the value of TEAM_BATTING_H, we sum up singles, doubles, triples and home runs in the actual code, and the approach for TEAM_TOTAL_BASES is described in model 2. The data for BSR exhibit a fairly normal distribution.
+<!-- Since we eliminate the value of TEAM_BATTING_H, we sum up singles, doubles, triples and home runs in the actual code, and the approach for TEAM_TOTAL_BASES is described in model 2. The data for BSR exhibit a fairly normal distribution. -->
 
 <!-- ## Alec's Work -->
 
