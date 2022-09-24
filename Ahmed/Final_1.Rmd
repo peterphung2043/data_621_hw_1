@@ -2,9 +2,11 @@
 title: "Final_1"
 author: "Krutika Patel"
 date: '2022-09-23'
-output: html_document
+output:
+  html_document: default
+  pdf_document: default
 ---
-```{r setup, knitr::all_labels(), echo=TRUE, results='hide', warning=FALSE, message=FALSE }
+```{r echo = FALSE, setup, knitr::all_labels(), echo=TRUE, results='hide', warning=FALSE, message=FALSE }
 knitr::opts_chunk$set(echo = TRUE, class.source = "codechunk")
 
 library(RCurl)
@@ -18,33 +20,33 @@ library(reshape2)
 
 # 1 Data Exploration
 
-```{r}
+```{r echo = FALSE}
 suppressPackageStartupMessages(library(tidyverse))
 ```
 
 
 # Importing the datasets
-```{r training data}
+```{r training data echo = FALSE}
 #import dataset: moneyball_evaluation_data
-my_git_url <- getURL("https://raw.githubusercontent.com/AhmedBuckets/SPS621/main/moneyball-training-data.csv")
-raw_data<- read.csv(text = my_git_url)
+#my_git_url <- getURL("https://raw.githubusercontent.com/AhmedBuckets/SPS621/main/moneyball-training-data.csv")
+raw_data<- as.data.frame(read.csv('moneyball-training-data.csv'))
 ```
 
 
 
 # Viewing Data
-```{r}
+```{r echo = FALSE}
 head(raw_data)
 ```
 
 
 # Column Names
-```{r}
+```{r echo = FALSE}
 as.data.frame(colnames(raw_data))
 ```
 
 # Data Subset
-```{r}
+```{r echo = FALSE}
 training_data <- subset(raw_data, select = -INDEX)
 head(training_data)
 ```
@@ -52,14 +54,14 @@ head(training_data)
 
 # Summary Statistics
 Upon first glance, the data contains 17 columns. The index column will be ignored for analysis purposes, and so that leaves the other 16. TARGET_WINS is the variable we want to investigate with regards to how well it is correlated with the other columns. To give some context, every row represents a baseball team and its performance during a particular season. TARGET_WINS is the number of wins, and each column after that represents a particular metric for the season. For example, TEAM_BATTING_H represents how many base hits by batters occurred for that team during the season. TEAM_PITCHING_E represents how many times an opposing team made a pitching mistake during the season. 
-```{r}
+```{r echo = FALSE}
 summary(training_data)
 ```
 
 # NA exploration
 As can be seen below, some of the columns have missing values. Contextually, this can be possible because not every metric must have a value- for example it is possible that an entire season can be played without a batter being hit by the pitch. However it is less likely that an entire season can be played without any strikeouts by batters. We did some research and came up with ways to address each of these issues- more on that later. 
 
-```{r}
+```{r echo = FALSE}
 sapply(training_data, function(x) sum(is.na(x)))
 ```
 
@@ -67,7 +69,7 @@ sapply(training_data, function(x) sum(is.na(x)))
 suppressPackageStartupMessages(library("visdat"))
 ```
 
-```{r}
+```{r echo = FALSE}
 training_data  %>%
   summarise_all(list(~is.na(.)))%>%
   pivot_longer(everything(),
@@ -80,77 +82,12 @@ training_data  %>%
 
 ```
 
-```{r}
-suppressPackageStartupMessages(library("VIM"))
-```
-
-```{r}
-aggr_plot <- aggr(training_data, col=c('navyblue','red'), numbers=TRUE, sortVars=TRUE, labels=names(training_data), cex.axis=.48, gap=2, ylab=c("Histogram of missing data","Pattern"))
-```
-
-```{r}
-suppressPackageStartupMessages(library("scales"))
-```
-
-
-```{r}
-library("DataExplorer")
-```
-
-
-```{r}
-plot_missing(training_data, missing_only = TRUE, geom_label_args = list("size" = 3, "label.padding" = unit(0.1, "lines")))
-```
-
-# Correlation Plots
-```{r}
-suppressPackageStartupMessages(library(corrplot))
-```
-
-
-```{r}
-#correlation matrix
-#using only pairwise-complete observations to avoid NA values
-M <- cor(training_data, use="pairwise.complete.obs")
-
-#visualizing correlogram
-corrplot(M, method="circle", tl.col = "black", tl.cex = 0.6, tl.srt = 70)
-
-#as pie
-corrplot(M, method = "pie", tl.col = "black", tl.cex = 0.6, tl.srt = 70 )
-
-#as color
-corrplot(M, method = "color", tl.col = "black", tl.cex = 0.6, tl.srt = 70)
-
-#as number
-corrplot(M, method = "number", tl.col = "black", tl.cex = 0.6, tl.srt = 70)
-```
-
-# Boxplots
-
-Apply the `pivot_longer function` to reshape some of the columns of our data from wide to long format:
-```{r}
-#Reshape data frame
-train_long <- pivot_longer(training_data,
-                          c("TARGET_WINS", "TEAM_BATTING_H", "TEAM_BATTING_2B", "TEAM_BATTING_3B", "TEAM_BATTING_HR", "TEAM_BATTING_BB", "TEAM_BATTING_SO", "TEAM_BASERUN_SB", "TEAM_BASERUN_CS", "TEAM_BATTING_HBP", "TEAM_PITCHING_H", "TEAM_PITCHING_HR", "TEAM_PITCHING_BB", "TEAM_PITCHING_SO", "TEAM_FIELDING_E", "TEAM_FIELDING_DP"))
-```
-
-
-Apply the ggplot and geom_boxplot functions to the `train_long` data to visualize each of the selected columns in a side-by-side boxplot graphic:
-```{r message=FALSE, warning=FALSE}
-#Draw boxplots
-#rows containing non-finite value (stat_boxplot) removed NA rows
-ggplot(train_long, 
-       aes(x = log(value),
-           fill = name)) +
-  geom_boxplot()
-```
 
 # Histograms
 
 Creating a histogram for each of our columns, and using the `facet_wrap function` to separate each column in its own plotting panel:
 
-```{r}
+```{r echo = FALSE}
 #Draw histograms
 ggplot(train_long, 
        aes(x = log(value))) +
@@ -163,7 +100,7 @@ Another question we had was one of outliers- some of the values were way too hig
 
 Below we can see very quickly that some variables have extreme outliers. 
 
-```{r}
+```{r echo = FALSE}
 ggplot(stack(training_data), aes(x = ind, y = values)) +
   geom_boxplot()
 ```
@@ -176,7 +113,7 @@ There will be further discussion regarding how we dealt with the outliers on an 
 
 # Data Skew
 
-```{r}
+```{r echo = FALSE}
 training_data %>%
   keep(is.numeric) %>% 
   gather() %>% 
@@ -191,7 +128,7 @@ We can see that some of the variables are skewed to the right or the left like p
 This is an initial exploration of how the variables correlate with wins. In the chart below we can see that some of these variables correlate as we would expect with the number of wins - such as TEAM_BATTING correlating positively with wins. However some of them did not make sense- like TEAM_PITCHING_SO having a negative correlation with wins. We made this chart to get a general idea of how each variable related to the number of wins.  
 
 In this initial exploration it is clear that the outliers in some of the variables are affecting the lines of best fit. When we handle them properly, as well as impute the missing data, these lines will likely change. 
-```{r scatter per variable}
+```{r scatter per variable echo = FALSE}
 bb_games_melted <- melt(training_data, "TARGET_WINS")
 ggplot(data = bb_games_melted, aes(value, TARGET_WINS)) +
   geom_point() +
