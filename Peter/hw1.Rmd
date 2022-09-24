@@ -462,33 +462,33 @@ summary(step.model)
 TBD
 
 
-<!-- #### Dealing with Bimodal Variables -->
+#### Dealing with Bimodal Variables
 
-<!-- ```{r} -->
-<!-- library(mixtools) -->
-<!-- bimodal_var <- "TEAM_BATTING_SO" -->
-<!-- bimodal_var_data <-  complete_data[,bimodal_var] -->
-<!-- mixmdl = normalmixEM(bimodal_var_data) -->
+```{r}
+library(mixtools)
+bimodal_var <- "TEAM_BATTING_SO"
+bimodal_var_data <-  complete_data[,bimodal_var]
+mixmdl = normalmixEM(bimodal_var_data)
 
-<!-- mu_1 = mixmdl$mu[1] -->
-<!-- mu_2 = mixmdl$mu[2] -->
+mu_1 = mixmdl$mu[1]
+mu_2 = mixmdl$mu[2]
 
-<!-- sigma_1 = mixmdl$sigma[1] -->
-<!-- sigma_2 = mixmdl$sigma[2] -->
+sigma_1 = mixmdl$sigma[1]
+sigma_2 = mixmdl$sigma[2]
 
-<!-- histogram_intersection <- function(mu_1, mu_2, sigma_1, sigma_2){ -->
-<!--   if (sigma_1 == sigma_2) stop('Both Sigmas are the same. Get 1/0') -->
-<!--   (mu_2*(sigma_1^2) - sigma_2*(mu_1*sigma_2 + sigma_1*sqrt((mu_1 - mu_2)^2 + 2*(sigma_1^2 -      sigma_2^2)*log(sigma_1/sigma_2))))/(sigma_1^2 - sigma_2^2) -->
-<!-- } -->
+histogram_intersection <- function(mu_1, mu_2, sigma_1, sigma_2){
+  if (sigma_1 == sigma_2) stop('Both Sigmas are the same. Get 1/0')
+  (mu_2*(sigma_1^2) - sigma_2*(mu_1*sigma_2 + sigma_1*sqrt((mu_1 - mu_2)^2 + 2*(sigma_1^2 -      sigma_2^2)*log(sigma_1/sigma_2))))/(sigma_1^2 - sigma_2^2)
+}
 
-<!-- cutoff <- histogram_intersection(mu_1, mu_2, sigma_1, sigma_2) -->
+cutoff <- histogram_intersection(mu_1, mu_2, sigma_1, sigma_2)
 
-<!-- plot(mixmdl,which=2) -->
-<!-- lines(density(bimodal_var_data), lty=2, lwd=2) -->
-<!-- abline(v = cutoff) -->
-<!-- ``` -->
+plot(mixmdl,which=2)
+lines(density(bimodal_var_data), lty=2, lwd=2)
+abline(v = cutoff)
+```
 
-<!-- [Equation for where 2 normal distributions overlap](https://stats.stackexchange.com/questions/103800/calculate-probability-area-under-the-overlapping-area-of-two-normal-distributi) -->
+[Equation for where 2 normal distributions overlap](https://stats.stackexchange.com/questions/103800/calculate-probability-area-under-the-overlapping-area-of-two-normal-distributi)
 
 <!-- Now we create a new categorical variable, `bi_TEAM_BATTING_SO`, where the values that exceed the `cutoff` get a value of 0 and the values below get a value of 1. Than this is converted into a factor using the `factor` function. -->
 
