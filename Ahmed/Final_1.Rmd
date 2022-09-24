@@ -90,7 +90,9 @@ Below we can see very quickly that some variables have extreme outliers.
 
 ```{r echo = FALSE}
 ggplot(stack(training_data), aes(x = ind, y = values)) +
-  geom_boxplot()
+  geom_boxplot() + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
 ```
 Some research shows that these outliers could not make sense in a normal baseball season, for example:  
 
