@@ -18,6 +18,7 @@ library(mice)
 library(car)
 library(reshape)
 library(mixtools)
+library(dplyr)
 ```
 
 
@@ -66,6 +67,7 @@ tabl <- "
 "
 cat(tabl) # output the table in a format good for HTML/PDF/docx conversion
 ```
+*Table XX: New shorter names for variables which will be referenced in this report.*
 
 ```{r New column names for training data, echo = FALSE}
 
@@ -125,8 +127,13 @@ The MICE package in R implements a methodology where each incomplete variable is
 
 ---------------------------------
 
-The density of the imputed data for each imputed dataset is shown in magenta. The density of the observed data is shown in blue
+For the MICE algorithm, the number of multiple imputations was set to five. Figure XX shows the distribution of the 5 imputations in magenta, while the original data is shown in blue. The imputed distribution for `bas_sb` and `p_so` look close to the original data distribution which is good. The imputed data distributions for the other variables do not match so closely to the original data. Reasons include:
 
+- Some of the variables are bimodal in nature (which is why in `bas_cs` for example, there is bimodality in the imputed distributions). 
+
+- 34% of the data for `bas_cs` is missing, which is above 5%, while the missing data for `p_so` only makes up 4% of the total amount of missing data for that predictor.
+
+- 12% of the data for `f_dp` is missing, which is above 5%, while the missing data for `p_so` only makes up 4% of the total amount of missing data for that predictor.
 
 ```{r Using MICE, echo = FALSE}
 # Removal of bat_hbp
@@ -135,19 +142,20 @@ eval <- subset(eval, select = -c(bat_hbp))
 ```
 
 ```{r Imputing the missing data from MICE, include = FALSE}
-# temp_data <- mice(train,m=4,maxit=5,meth='midastouch',seed=500)
+temp_data <- mice(train,m=4,maxit=5,meth='midastouch',seed=500)
 temp_eval_data <- mice(eval,m=3,maxit=5,meth='pmm',seed=500)
-# summary(temp_data)
+summary(temp_data)
 ```
 
 ```{r, echo = FALSE}
-complete_data <- complete(temp_data,1)
-complete_eval_data <- complete(temp_eval_data,1)
+complete_data <- mice::complete(temp_data,1)
+complete_eval_data <- mice::complete(temp_eval_data,1)
 ```
 
-```{r}
+```{r, echo = FALSE}
 densityplot(temp_data)
 ```
+*Figure XX: Density plots for variables containing missing data.*
 
 ### Analysis of Outliers
 
@@ -159,7 +167,6 @@ Several predictors contained outliers that contradicted existing baseball statis
 replace_median <- median(complete_data$bat_h[complete_data$bat_h <= 1783])
 
 complete_data$bat_h[complete_data$bat_h > 1783] <- replace_median
-
 complete_eval_data$bat_h[complete_eval_data$bat_h > 1783] <- replace_median
 ```
 
@@ -188,7 +195,6 @@ complete_eval_data$p_h[(complete_eval_data$p_h > upper_limit) | (complete_eval_d
 replace_median <- median(complete_data$p_so[complete_data$p_so <= 1595])
 
 complete_data$p_so[complete_data$p_so > 1595] <- replace_median
-
 complete_eval_data$p_so[complete_eval_data$p_so > 1595] <- replace_median
 ```
 
@@ -198,7 +204,6 @@ complete_eval_data$p_so[complete_eval_data$p_so > 1595] <- replace_median
 replace_median <- median(complete_data$f_e[complete_data$f_e <= 886])
 
 complete_data$f_e[complete_data$f_e > 886] <- replace_median
-
 complete_eval_data$f_e[complete_eval_data$f_e > 886] <- replace_median
 ```
 
@@ -218,67 +223,87 @@ complete_eval_data$p_bb[(complete_eval_data$p_bb > upper_limit) | (complete_eval
 
 ```
 
-#### Updated Distributions After Outlier Analysis and Imputing NA Values
+After accounting for all of the outliers and imputing NA values using the MICE algorithm, the distributions of the variables is shown below on Figure XX.
 
 ```{r echo = FALSE}
 ggplot(stack(complete_data), aes(x = ind, y = values, fill=ind)) +
   geom_boxplot() + 
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
 ```
+*Figure XX: Updated distributions after outlier analysis and imputing NA Values*
 
-< THIS LOOKS MUCH BETTER, THERE ARE STILL SOME PROBLEMS WITH FEATURES LIKE BAS_SB, F_E... WE CAN CONSIDER ADDRESSING THESE AT A LATER TIME (BUT WILL NOT DO IT!!!!!!)>
+### Box-Cox Transformation for Skewed Variables
 
-### Box-Cox Transformation for skewed variables
+Figure XX shows that `bat_3b`, `bas_sb`, `bas_cs`, `f_e`, `p_bb`, and `p_h` have some degree of skewness. Therefore, a Box-Cox transformation was applied to these variables in order to bring them to a normal distribution in order to satisfy [the normality assumption](https://www.statisticshowto.com/assumption-of-normality-test/) for certain statistical tests of regression to be valid. The Box-Cox transformation can only be used if the data contains strictly positive values. The initial summary of the data revealed that the minimums for 10 of the variables were zero. Therefore, variables where a Box-Cox transformation would be performed had their zero values replaced with $1 \times 10^6$.
 
-<Remind the reader which features had skews>
+The $\lambda$'s that were used to transform the skewed variables are shown on Table XX
 
-Try replacing the 0 values with really small values(1e-6) which will allow you to perform the Box-Cox transformation.
-
-```{r}
+```{r Replacing 0 values with 1e-6, echo = FALSE}
 complete_data[complete_data == 0] <- 1e-6
 
 complete_eval_data[complete_eval_data == 0] <- 1e-6
 ```
 
-After we use `powerTransform` to do the Box-Cox transformation, we than delete the original columns from `complete_data` using the `select` function from dplyr. Than use the `cbind` function to append the `transformed_data` to the `complete_data`. 
 
-```{r}
+```{r, echo = FALSE}
+# After we use `powerTransform` to do the Box-Cox transformation, we than delete the original columns from `complete_data` using the `select` function from dplyr. Than use the `cbind` function to append the `transformed_data` to the `complete_data`. 
 
-skewed_vars <- "bat_3b, bas_sb, bas_cs, f_e"
+skewed_vars <- "bat_3b, bas_sb, bas_cs, f_e, p_bb, p_h"
 
 lambdas <- powerTransform(eval(parse(text = paste("cbind(",skewed_vars,")", "~ 1"))), complete_data)
 
 transformed_data <- bcPower(lambdas$y, coef(lambdas))
+colnames(transformed_data) <- colnames(lambdas$y)
+
+transformed_eval_data <- bcPower(complete_eval_data %>% dplyr::select(colnames(lambdas$y)), coef(lambdas))
+colnames(transformed_eval_data) <- colnames(lambdas$y)
 
 complete_data <- cbind(subset(complete_data, select = eval(parse(text = paste("-c(", skewed_vars, ")")))),
                        transformed_data)
-```
-
-```{r}
-
-lambdas <- powerTransform(eval(parse(text = paste("cbind(",skewed_vars,")", "~ 1"))), complete_eval_data)
-
-transformed_data <- bcPower(lambdas$y, coef(lambdas))
-colnames(transformed_data) <- colnames(lambdas$y)
-
-complete_eval_data <- cbind(subset(complete_eval_data, select = eval(parse(text = paste("-c(", skewed_vars, ")")))),transformed_data)
+complete_eval_data <- cbind(subset(complete_eval_data, select = eval(parse(text = paste("-c(", skewed_vars, ")")))),
+                       transformed_eval_data)
 ```
 
 
-```{r echo = FALSE}
-complete_data %>%
+
+```{r tablexxx, echo=FALSE, message=FALSE, warnings=FALSE, results='asis'}
+tabl <- "
+|Column Name|$\\lambda$|
+|---------------|-------------:|
+|bat_3b|0.400|
+|bas_sb|0.220|
+|bas_cs|0.232|
+|f_e|-0.753|
+|p_bb|0.460|
+|p_h|-2.034|
+"
+cat(tabl) # output the table in a format good for HTML/PDF/docx conversion
+```
+*Table XX: $\lambda$'s for skewed variables.*
+
+```{r message = FALSE, echo = FALSE}
+complete_data %>% 
+  dplyr::select(colnames(lambdas$y)) %>%
   keep(is.numeric) %>% 
   gather() %>% 
   ggplot(aes(value)) +
     facet_wrap(~ key, scales = "free") +
     geom_histogram()
 ```
+*Figure XX: Histograms for transformed variables.*
 
 ### Dealing with Bimodal Variables
 
-<@Peter please write an explanation for your approach>
+Figure XX shows that bimodality is present in `bat_so`, `p_hr`, `bat_hr`. While a Box-Cox transformation could have been undertaken in order to transform the bimodal variables to a normal distribution. However, this throws away important information that is inherent in the bimodal variable itself. The fact that the variable is bimodal in the first place is essentially ignored, and the predicted values in the linear multiple regression model will not reflect this bimodality. 
 
-```{r}
+Therefore, several steps were taken in order to deal with these variables. First, two histograms were fit to these variables using the `mixtools` package. Then, the intersection point between the two histograms was determined by [solving for $c$](https://stats.stackexchange.com/questions/103800/calculate-probability-area-under-the-overlapping-area-of-two-normal-distributi). Where
+
+$$c = \frac{\mu_2\sigma_1^2 - \sigma_2(\mu_1\sigma_2 + \sigma_1\sqrt{(\mu_1 - \mu_2)^2 + 2(\sigma_1^2 - \sigma_2^2)log\frac{\sigma_1}{\sigma_2}})}{\sigma_1^2 - \sigma_2^2}$$
+Where $\mu_1$ and $\sigma_1$ are the mean and standard deviation for the left distribution and $\nu_2$ and $\sigma_2$ are the mean and standard deviation for the right distribution. 
+
+A new variable was created for each bimodal predictor, where any observed values below $c$ would be assigned a value of 0, while any observed values above $c$ would be assigned a value of 1. For example, $c$ for `bat_so` was calculated to be 806.39. `bi_bat_so` is a new dummy variable that was created where any values above 806.39 in the original `bat_so` data were assigned a value of 0, while values below 806.39 were assigned a value of 1. The $\lambda$'s for the three bimodal variables are shown in Table XX. The counts for the unique values are shown in each dummy variable are shown on the barcharts on Figure XXX.
+
+```{r, message = FALSE, echo = FALSE}
 # Finds where two histograms intersect
 histogram_intersection <- function(mu_1, mu_2, sigma_1, sigma_2){
   if (sigma_1 == sigma_2) stop('Both Sigmas are the same. Get 1/0')
@@ -300,9 +325,13 @@ create_bimodal_cutoff <- function(bimodal_var, df){
   
   cutoff <- histogram_intersection(mu_1, mu_2, sigma_1, sigma_2)
   
+  # print(paste(text = "mu for ", bimodal_var, ": ", mixmdl$mu))
+  # print(paste(text = "sigma for ", bimodal_var, ": ", mixmdl$sigma))
+  # print(paste(text = "cutoff for", bimodal_var, ": ", cutoff))
+  
   plot(mixmdl,which=2)
   lines(density(bimodal_var_data), lty=2, lwd=2)
-  abline(v = cutoff)
+  abline(v = cutoff, lwd = 5, col = "red", lty = "dashed")
   return(cutoff)
 }
 
@@ -316,48 +345,80 @@ append_bimodal_dummy_var <- function(cutoff, bimodal_var, df){
 }
 
 # Creates dummy variables based on bimodal data. 
-create_bimodal_dummy_var <- function(bimodal_var, df){
-  cutoff <- create_bimodal_cutoff(bimodal_var, df)
+create_bimodal_dummy_var <- function(bimodal_var, df, cutoff = 0, data = "train"){
+  if (data == "train"){
+    cutoff <- create_bimodal_cutoff(bimodal_var, df)
+  }
   df <- append_bimodal_dummy_var(cutoff, bimodal_var, df)
   return(df)
 }
 
 ```
 
-```{r}
-for (bimodal_var in c("bat_so", "p_hr", "bat_hr")){
-  complete_data <- create_bimodal_dummy_var(bimodal_var, complete_data)
+```{r, message = FALSE, echo = FALSE, results = 'hide', fig.keep='all', fig.height=8}
+bimodal_vars <- c("bat_so", "p_hr", "bat_hr")
+
+par(mfrow = c(3, 1))
+for (bimodal_var in bimodal_vars) {
+  complete_data <- create_bimodal_dummy_var(bimodal_var = bimodal_var, df = complete_data)
 }
+
+#The cutoffs for these variables were determined using the cutoff determined from the training data.
+complete_eval_data <- create_bimodal_dummy_var(bimodal_var = "bat_so", df = complete_eval_data, data = "eval", cutoff = 806.3912360026)
+
+complete_eval_data <- create_bimodal_dummy_var(bimodal_var = "p_hr", df = complete_eval_data, data = "eval", cutoff = 60.9249073181497)
+
+complete_eval_data <- create_bimodal_dummy_var(bimodal_var = "bat_hr", df = complete_eval_data, data = "eval", cutoff = 54.9342731376338)
+
 ```
+*Figure xx: Density curves for each bimodal predictor with two normal distributions fit to each peak. *
 
-```{r eval=FALSE}
-ggplot(data = melt(complete_data, "target"), aes(value)) +
-  geom_histogram() +
-  facet_wrap(.~variable, scales = "free")
+
+```{r tablexy, echo=FALSE, message=FALSE, warnings=FALSE, results='asis'}
+tabl <- "
+|Column Name|$\\mu_1$|$\\mu_2$|$\\sigma_1$|$\\sigma_2$|$c$|Count of $0$'s|Count of $1$'s|
+|---------------|:-------------:|:-------------:|:-------------:|-------------:|:-------------:|-------------:|
+|bat_so|606.31|972.61|199.88|114.06|806.38|969|1307|
+|p_hr|31.43|127.37|14.39|52.08|60.93|1602|674|
+|bat_hr|26.55|125.06|13.10|48.72|54.93|1583|693|
+"
+cat(tabl) # output the table in a format good for HTML/PDF/docx conversion
 ```
+*Table xx: Summary of bimodal dummy variable generation*
 
 
---------------------------- PETER TO CORRECT / CREATE FUNCTION
+```{r echo=FALSE}
+
+par(mfrow = c(1, 3))
+for (var in paste("bi_", bimodal_vars, sep = "")){
+  plot(complete_data[,var], xlab = var)
+}
+
+
+```
+*Figure XX: Bar graphs for each of the bimodal dummy variables. $0$ represents the amount of observations for the original variable where the value was above $c$, while $1$ represents the amount of observations below $c$*
 
 
 ### Add SABER analysis
 
 Saber Model
 
-Sabermetrics has become the rage in baseball, actually popularized by Billy Beane and the data set we are exploring. As a result, we built a model that centers around one of these advance analytics known as BsR or base runs. This statistic (designed by David Smyth in the 1990’s) estimates the amount of runs a team SHOULD score, adding an intriguing element to a data set which does not include runs (see http://tangotiger.net/wiki_archive/Base_Runs.html for more information). The formula For BsR is as follows:
+Sabermetrics has become the rage in baseball, actually popularized by Billy Beane and the data set we are exploring. As a result, we built a model that centers around one of these advance analytics known as BsR or base runs. This statistic (designed by David Smyth in the 1990’s) estimates the amount of runs a team SHOULD score, adding an intriguing element to a data set which does not include runs (see http://tangotiger.net/wiki_archive/Base_Runs.html for more information). The formula For BSR is as follows:
 
-BSR = A*B/(B+A)+C where:
+$$BSR = AB/(B+A)+C$$
 
-A = TEAM_BATTING_1B + TEAM_BATTING_2B + TEAM_BATTING_3B + TEAM_BATTING_BB
+where:
 
-B = 1.02(1.4TEAM_TOTAL_BASES -0.6TEAM_BATTING_H + 0.1TEAM_BATTING_BB)
+$$A = TEAM \_ BATTING\_1B + TEAM\_BATTING\_2B + TEAM\_BATTING\_3B + TEAM\_BATTING\_BB$$
 
-C = TEAM_BATTING_HR
+$$B = 1.02(1.4TEAM\_TOTAL\_BASES -0.6TEAM\_BATTING\_H + 0.1TEAM\_BATTING\_BB)$$
 
-Since we eliminate the value of TEAM_BATTING_H, we sum up singles, doubles, triples and home runs in the actual code, and the approach for TEAM_TOTAL_BASES is described in model 2. The data for BSR exhibit a fairly normal distribution.
+$$C = TEAM\_BATTING\_HR$$
+
+Since we eliminate the value of `TEAM_BATTING_H`, we sum up singles, doubles, triples and home runs in the actual code, and the approach for `TEAM_TOTAL_BASES` is described in model 2. This new predictor, `BSR`, exhibits a fairly normal distribution as shown on Figure XX.
 
 
-```{r}
+```{r, echo = FALSE}
 complete_data$bat_1b <- complete_data$bat_h - complete_data$bat_2b - complete_data$bat_3b - complete_data$bat_hr
 complete_data$total_bases <- complete_data$bat_1b + 2*complete_data$bat_2b + 3*complete_data$bat_3b + 4*complete_data$bat_hr
 
@@ -369,7 +430,7 @@ C <- complete_data$bat_hr
 complete_data$saber <- A*B/(B+A)+C
 ```
 
-```{r}
+```{r, echo = FALSE}
 complete_eval_data$bat_1b <- complete_eval_data$bat_h - complete_eval_data$bat_2b - complete_eval_data$bat_3b - complete_eval_data$bat_hr
 
 complete_eval_data$total_bases <- complete_eval_data$bat_1b + 2*complete_eval_data$bat_2b + 3*complete_eval_data$bat_3b + 4*complete_eval_data$bat_hr
@@ -382,11 +443,16 @@ C <- complete_eval_data$bat_hr
 complete_eval_data$saber <- A*B/(B+A)+C
 ```
 
-```{r}
+```{r, echo = FALSE}
+hist(complete_data$saber, main = "", xlab = "BSR", ylab = "Count")
+```
+*Figure XX: Histogram of BSR Predictor*
+
+```{r, echo = FALSE}
 write.csv(complete_data, "../data/final_clean_train.csv")
 ```
 
-```{r}
+```{r, echo = FALSE}
 write.csv(complete_eval_data, "../data/final_clean_eval.csv")
 ```
 
