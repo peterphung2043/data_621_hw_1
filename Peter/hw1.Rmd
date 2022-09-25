@@ -16,6 +16,7 @@ require(dplyr)
 require(mice)
 require(VIM)
 require(stringr)
+require(mixtools)
 rm(list = ls())
 if(!is.null(dev.list()))dev.off()
 ```
@@ -317,10 +318,6 @@ I think that we should transform to a normal distribution first using Box-Cox, a
 Mainly following this in order to impute missing data: https://datascienceplus.com/imputing-missing-data-with-r-mice-package/
 
 **Note that at this step, we have taken out the outliers.**
-```{r}
-pMiss <- function(x){sum(is.na(x))/length(x)*100}
-apply(moneyball_training_data, 2, pMiss)
-```
 
 The output above shows the percentage of missing data for each variable.
 
@@ -387,6 +384,7 @@ skewed_vars <- "TEAM_BATTING_3B, TEAM_BASERUN_SB, TEAM_BASERUN_CS, TEAM_FIELDING
 lambdas <- powerTransform(eval(parse(text = paste("cbind(",skewed_vars,")", "~ 1"))), complete_data)
 
 transformed_data <- bcPower(lambdas$y, coef(lambdas))
+colnames(transformed_data) <- colnames(lambdas$y)
 
 complete_data <- cbind(subset(complete_data, select = eval(parse(text = paste("-c(", skewed_vars, ")")))),
                        transformed_data)
@@ -465,37 +463,58 @@ TBD
 #### Dealing with Bimodal Variables
 
 ```{r}
-library(mixtools)
-bimodal_var <- "TEAM_BATTING_SO"
-bimodal_var_data <-  complete_data[,bimodal_var]
-mixmdl = normalmixEM(bimodal_var_data)
-
-mu_1 = mixmdl$mu[1]
-mu_2 = mixmdl$mu[2]
-
-sigma_1 = mixmdl$sigma[1]
-sigma_2 = mixmdl$sigma[2]
-
+# Finds where two histograms intersect
 histogram_intersection <- function(mu_1, mu_2, sigma_1, sigma_2){
   if (sigma_1 == sigma_2) stop('Both Sigmas are the same. Get 1/0')
   (mu_2*(sigma_1^2) - sigma_2*(mu_1*sigma_2 + sigma_1*sqrt((mu_1 - mu_2)^2 + 2*(sigma_1^2 -      sigma_2^2)*log(sigma_1/sigma_2))))/(sigma_1^2 - sigma_2^2)
 }
 
-cutoff <- histogram_intersection(mu_1, mu_2, sigma_1, sigma_2)
+# Fits two histograms to df[,bimodal_var] where `bimodal_var` is a bimodal
+# variable. Than finds the point where the two histograms intersects. This
+# value is returned as `cutoff`
+create_bimodal_cutoff <- function(bimodal_var, df){
+  bimodal_var_data <-  df[,bimodal_var]
+  mixmdl = normalmixEM(bimodal_var_data)
+  
+  mu_1 = mixmdl$mu[1]
+  mu_2 = mixmdl$mu[2]
+  
+  sigma_1 = mixmdl$sigma[1]
+  sigma_2 = mixmdl$sigma[2]
+  
+  cutoff <- histogram_intersection(mu_1, mu_2, sigma_1, sigma_2)
+  
+  plot(mixmdl,which=2)
+  lines(density(bimodal_var_data), lty=2, lwd=2)
+  abline(v = cutoff)
+  return(cutoff)
+}
 
-plot(mixmdl,which=2)
-lines(density(bimodal_var_data), lty=2, lwd=2)
-abline(v = cutoff)
+# Creates a dummy variable where any values for df[,bimodal_var] below `cutoff`
+# are given a 1, and any values above are given a 0. Since these are dummy
+# variables, they are converted from `numeric` to `factor`s using the `factor`
+# function.
+append_bimodal_dummy_var <- function(cutoff, bimodal_var, df){
+  df[,paste("bi", bimodal_var, sep = "_")] <- factor((df[,bimodal_var] < cutoff) * 1)
+  return(df)
+}
+
+# Creates dummy variables based on bimodal data. 
+create_bimodal_dummy_var <- function(bimodal_var, df){
+  cutoff <- create_bimodal_cutoff(bimodal_var, df)
+  df <- append_bimodal_dummy_var(cutoff, bimodal_var, df)
+  return(df)
+}
+
+```
+
+```{r}
+for (bimodal_var in c("TEAM_BATTING_HR", "TEAM_BATTING_SO", "TEAM_PITCHING_SO")){
+  complete_data <- create_bimodal_dummy_var(bimodal_var, complete_data)
+}
 ```
 
 [Equation for where 2 normal distributions overlap](https://stats.stackexchange.com/questions/103800/calculate-probability-area-under-the-overlapping-area-of-two-normal-distributi)
-
-<!-- Now we create a new categorical variable, `bi_TEAM_BATTING_SO`, where the values that exceed the `cutoff` get a value of 0 and the values below get a value of 1. Than this is converted into a factor using the `factor` function. -->
-
-<!-- ```{r} -->
-<!-- complete_data$bi_TEAM_BATTING_SO <- factor((complete_data$TEAM_BATTING_SO < cutoff) * 1) -->
-<!-- summary(complete_data) -->
-<!-- ``` -->
 
 
 <!-- ```{r} -->
@@ -523,6 +542,9 @@ vif(lmod)
 
 plot(na.omit(complete_data)$TARGET_WINS, predict(lmod), xlab = 'y', ylab = 'y_hat')
 abline(a = 0, b = 1)
+
+step.model <- stepAIC(lmod, direction = "both", trace = FALSE)
+summary(step.model)
 ```
 
 <!-- #### Importing Evaluation Data -->
@@ -539,3 +561,15 @@ abline(a = 0, b = 1)
 <!-- bcPower(subset(moneyball_evaluation_data, select = eval(parse(text = paste("c(", skewed_vars, ")")))), lambdas$lambda) -->
 
 <!-- ``` -->
+
+
+[Tabachnick and Fidell ](https://imaging.mrc-cbu.cam.ac.uk/statswiki/FAQ/missing) point out that imputations by the means/medians is acceptable if the missing values only account for 5% of the sample. Peng et al.(2006) suggest that mean imputation is permissible only if no more than 20% of the data is missing. [Bruin](https://stats.oarc.ucla.edu/sas/seminars/multiple-imputation-in-sas/mi_new_1/) points out that unconditional mean and median imputation results in an artificual reduction in variability due to the fact that values are being imputed at the center of the variable's distribution. [Wicklin](https://blogs.sas.com/content/iml/2017/12/06/problems-mean-imputation.html) points out that: 
+
+
+"...mean and median imputation also shrinks standard errors, which invalidates most hypothesis tests and the calculation of the confidence interval." 
+
+and
+
+
+"...does not preserve relationships between variables such as correlations."
+
