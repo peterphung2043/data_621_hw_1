@@ -1,10 +1,11 @@
 ---
 title: "DATA 621 - Homework 1"
+authors: Peter Phung, Ahmed Elsaeyed, Alec McCabe, Coffy Andrews, Krutika Patel
 output:
   pdf_document: default
   word_document: default
   html_document: default
-date: '2022-09-10'
+date: '2022-09-25'
 ---
 
 ```{r  setup, knitr::all_labels(), echo=FALSE, results='hide', warning=FALSE, message=FALSE }
@@ -501,7 +502,7 @@ create_bimodal_dummy_var <- function(bimodal_var, df, cutoff = 0, data = "train"
 ```
 
 
-```{r, message = FALSE, echo = FALSE, results = 'hide', fig.keep='all', fig.height=6}
+```{r, message = FALSE, echo = FALSE, results = 'hide', fig.keep='all'}
 bimodal_vars <- c("bat_so", "p_hr", "bat_hr")
 
 par(mfrow = c(3, 1))
