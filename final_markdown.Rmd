@@ -1,8 +1,9 @@
 ---
 title: "DATA 621 - Homework 1"
 output:
-  html_document: default
+  pdf_document: default
   word_document: default
+  html_document: default
 date: '2022-09-10'
 ---
 
@@ -23,6 +24,7 @@ library(mixtools)
 library(tidyverse)
 library(GGally)
 library(MASS)
+library(faraway)
 suppressPackageStartupMessages(library("visdat"))
 ```
 
@@ -30,7 +32,6 @@ suppressPackageStartupMessages(library("visdat"))
 
 Our objective is to make a linear regression model that can predict how many wins a baseball team will have in a season based on certain metrics. The variables we have been provided theoretically have positive or negative effects on the total number of wins. We will be exploring this in depth in our research to figure out which variables are correlated the most strongly with the wins, as well as finding out if some of the variables can be consolidated using known conventional baseball-stats algorithms like SABER.
 
-# Importing the datasets
 ```{r echo = FALSE}
 #import dataset: moneyball-training-data
 train<- read.csv("https://raw.githubusercontent.com/AhmedBuckets/SPS621/main/moneyball-training-data.csv")
@@ -43,12 +44,13 @@ eval <- read.csv("https://raw.githubusercontent.com/AhmedBuckets/SPS621/main/mon
 
 ### Viewing Data
 
-Upon first glance, the data contains 17 columns. The index column will be ignored for analysis purposes, and so that leaves the other 16. TARGET_WINS is the variable we want to investigate with regards to how well it is correlated with the other columns. To give some context, every row represents a baseball team and its performance during a particular season. TARGET_WINS is the number of wins, and each column after that represents a particular metric for the season. For example, TEAM_BATTING_H represents how many base hits by batters occurred for that team during the season. TEAM_PITCHING_E represents how many times an opposing team made a pitching mistake during the season. In general, there are four categories of feature types:
+Upon first glance, the data contains 17 columns. The index column will be ignored for analysis purposes, and so that leaves the other 16. `TARGET_WINS` is the variable we want to investigate with regards to how well it is correlated with the other columns. To give some context, every row represents a baseball team and its performance during a particular season. `TARGET_WINS` is the number of wins, and each column after that represents a particular metric for the season. For example, `TEAM_BATTING_H` represents how many base hits by batters occurred for that team during the season. `TEAM_PITCHING_E` represents how many times an opposing team made a pitching mistake during the season. In general, there are four categories of feature types:
 
 - Batting
 - Baserunning
 - Pitching
 - Fielding
+
 
 ```{r echo = FALSE}
 train <- subset(train, select = -INDEX)
@@ -59,7 +61,7 @@ summary(train)
 
 From the above summary, we can see that that target variable is roughly normally distributed, with a mean of total wins around 80 games. This makes intuitive sense, as a standard season is 162 games, we would expect that the average number of wins would be roughly half of this value. 
 
-There are a few columns which appear to have outliers, particularly TEAM_PITCHING_H, and we will investigate those in depth throughout our data exploration and data preparation steps.
+There are a few columns which appear to have outliers, particularly `TEAM_PITCHING_H`, and we will investigate those in depth throughout our data exploration and data preparation steps.
 
 
 ### NA exploration
@@ -78,10 +80,7 @@ train  %>%
   theme(axis.title.y=element_blank()) + theme_classic()
 
 ```
-
-<@Peter talk about the 6 columsn that are missing values. Allude to what we will do later in section 2.
-
-Talk about how we COULD use medians or means... but why that's bad... MICE>
+*Figure 1: Barplot of number of missing values for each predictor.*
 
 ### Outliers
 
@@ -89,21 +88,24 @@ Another question we had was one of outliers- some of the values were way too hig
 
 Below we can see very quickly that some variables have extreme outliers. 
 
-```{r echo = FALSE}
+```{r message = FALSE, echo = FALSE}
 ggplot(stack(train), aes(x = ind, y = values)) +
   geom_boxplot() + 
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
 ```
-From the chart above, we can see that the most problematic features include TEAM_PITCHING_H, TEAM_PITCHING_BB, and TEAM_PITCHING_SO. Where available we will employ cutoffs based on third party reference data such as baseball-almanac.com. If there is no available data, we will use other logical imputation methods to replace the outliers with reasonable values more fit to the data.
+*Figure 2: Boxplots for all variables.*
+
+
+From the chart above, we can see that the most problematic features include `TEAM_PITCHING_H`, `TEAM_PITCHING_BB`, and `TEAM_PITCHING_SO.` Where available we will employ cutoffs based on third party reference data such as baseball-almanac.com. If there is no available data, we will use other logical imputation methods to replace the outliers with reasonable values more fit to the data.
 
 ### Data Skew
 
 It's important to understand the distributions of each feature. Optimally, we would want to see normal distributions in order to create an effective regression model.
 
-Creating a histogram for each of our columns, and using the `facet_wrap function` to separate each column in its own plotting panel:
+A histogram for each of the variables is provided in Figure 3.
 
 
-```{r echo = FALSE}
+```{r message = FALSE, echo = FALSE, warning = FALSE, results = 'hide', fig.keep='all'}
 train %>%
   keep(is.numeric) %>% 
   gather() %>% 
@@ -111,17 +113,19 @@ train %>%
     facet_wrap(~ key, scales = "free") +
     geom_histogram()
 ```
-We can see that some of the variables are skewed to the right or the left like TEAM_PITCHING_SO. Some of them even have more than one spike (bi-modal) like TEAM_PITCHING_H. We will also handle these individually in the data_preparation portion. 
+*Figure 3: Histograms for all of the variables.*
+
+We can see that some of the variables are skewed to the right or the left like `TEAM_PITCHING_SO.` Some of them even have more than one spike (bimodal) like `TEAM_PITCHING_H.` We will also handle these individually in the Data Preparation portion. 
 
 While some columns exhibit these abnormalities, it is worth noting that the majority of features will not need to be addressed with transformations. As mentioned before, our target feature is very well normally distributed.
 
 ### Initial Correlation 
 
-This is an initial exploration of how the variables correlate with wins. In the chart below we can see that some of these variables correlate as we would expect with the number of wins - such as TEAM_BATTING correlating positively with wins. However some of them did not make sense- like TEAM_PITCHING_SO having a negative correlation with wins. We made this chart to get a general idea of how each variable related to the number of wins.  
+This is an initial exploration of how the variables correlate with wins. In the chart below we can see that some of these variables correlate as we would expect with the number of wins - such as `TEAM_BATTING` correlating positively with wins. However some of them did not make sense- like `TEAM_PITCHING_SO` having a negative correlation with wins. We made this chart to get a general idea of how each variable related to the number of wins.  
 
 In this initial exploration it is clear that the outliers in some of the variables are affecting the lines of best fit. When we handle them properly, as well as impute the missing data, these lines will likely change. 
 
-```{r echo = FALSE}
+```{r message = FALSE, echo = FALSE, warning = FALSE}
 bb_games_melted <- melt(train, "TARGET_WINS")
 ggplot(data = bb_games_melted, aes(value, TARGET_WINS)) +
   geom_point() +
@@ -129,22 +133,25 @@ ggplot(data = bb_games_melted, aes(value, TARGET_WINS)) +
   geom_smooth(method = "lm")
 
 ```
+*Figure 4: Correlation plot against the target variable for each predictor.*
+
 
 ### Examining Feature Multicollinearity
 
-Finally, it is imperitive to understand which features are correlated with eachother in order to address and avoid multicollinearity within our models. By using a correlation plot, we can visualize the relationships between certain features.
+Finally, it is imperative to understand which features are correlated with each other in order to address and avoid multicollinearity within our models. By using a correlation plot, we can visualize the relationships between certain features.
 
-
-```{r}
+```{r, echo = FALSE}
 corrplot(cor(train, use = "na.or.complete"), method = 'number', type = 'lower', diag = FALSE, number.cex = 0.5, tl.cex = 0.5)
 ```
+*Figure 5: Feature correlation plot.*
 
-From the above correlation plot, we notice that there are a few features which exhibit very strong positive correlation. In patricular:
 
-- TEAM_PITCHING_H & TEAM_BATTIING_H == 1.0 correlation
-- TEAM_PITCHING_HR & TEAM_BATTING_HR == 1.0 correlation
-- TEAM_PITCHING_BB & TEAM_BATTING_BB == 1.0 correlation
-- TEAM_PITCHING_SO & TEAM_BATTING_SO == 1.0 correlation
+From the above correlation plot, we notice that there are a few features which exhibit very strong positive correlation. In particular:
+
+- `TEAM_PITCHING_H` & `TEAM_BATTIING_H` == 1.0 correlation
+- `TEAM_PITCHING_HR` & `TEAM_BATTING_HR` == 1.0 correlation
+- `TEAM_PITCHING_BB` & `TEAM_BATTING_BB` == 1.0 correlation
+- `TEAM_PITCHING_SO` & `TEAM_BATTING_SO` == 1.0 correlation
 
 However, we must consider that these initial correlation values could be influenced by the fact that missing values and outliers have yet to be addressed. In later sections we will revisit this chart to determine final correlation values prior to model development.
 
@@ -177,6 +184,8 @@ tabl <- "
 "
 cat(tabl) # output the table in a format good for HTML/PDF/docx conversion
 ```
+*Table 1: Renamed columns*
+
 
 ```{r New column names for training data, echo = FALSE}
 
@@ -242,15 +251,23 @@ temp_eval_data <- mice(eval,m=3,maxit=5,meth='pmm',seed=500)
 ```
 
 ```{r, echo = FALSE}
-complete_data <- complete(temp_data,1)
-complete_eval_data <- complete(temp_eval_data,1)
+complete_data <- mice::complete(temp_data,1)
+complete_eval_data <- mice::complete(temp_eval_data,1)
 ```
 
-```{r}
+```{r, echo = FALSE}
 densityplot(temp_data)
 ```
+*Figure 6: Density plots for variables containing missing data.*
 
-Following use of the MICE package, we can visualize the distributions of the imputed versus existing data points. The density of the imputed data for each imputed dataset is shown in magenta. The density of the observed data is shown in blue.
+
+Following use of the MICE package, we can visualize the distributions of the imputed versus existing data points as shown on Figure 6. The density of the imputed data for each imputed dataset is shown in magenta. The density of the observed data is shown in blue. For the MICE algorithm, the number of multiple imputations was set to five. The imputed distribution for `bas_sb` and `p_so` look close to the original data distribution which is good. The imputed data distributions for the other variables do not match so closely to the original data. Reasons include:
+
+- Some of the variables are bimodal in nature (which is why in `bas_cs` for example, there is bimodality in the imputed distributions). 
+
+- 34% of the data for `bas_cs` is missing, which is above 5%, while the missing data for `p_so` only makes up 4% of the total amount of missing data for that predictor.
+
+- 12% of the data for `f_dp` is missing, which is above 5%, while the missing data for `p_so` only makes up 4% of the total amount of missing data for that predictor.
 
 ### Analysis of Outliers
 
@@ -330,41 +347,37 @@ ggplot(stack(complete_data), aes(x = ind, y = values, fill=ind)) +
   geom_boxplot() + 
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
 ```
+*Figure 7: Updated distributions after outlier analysis and imputing NA Values*
+
 
 While there are still outliers present in the dataset, particularly for bas_sb and f_e, we can see a large improvement from before. All features are wihin the range 0-2500. We can attempt to further deal with outliers should the need arise, but for now we will accept this distribution.
 
 ### Box-Cox Transformation for skewed variables
 
 Based on the previous distribution plot (using histograms) we noticed that a select group of columns exhibited non-normal skew. In particular, the following columns showed signs of left-skew:
-- bat_3b
-- bas_sb
-- bas_cs
-- f_e
-- p_bb
-- p_h
 
-```{r echo = FALSE}
+
+```{r message = FALSE, echo = FALSE, warning = FALSE}
 train %>%
-  select(c(bat_3b, bas_sb, bas_cs, f_e, p_bb, p_h)) %>%
+  dplyr::select(c(bat_3b, bas_sb, bas_cs, f_e, p_bb, p_h)) %>%
   keep(is.numeric) %>% 
   gather() %>% 
   ggplot(aes(value)) +
     facet_wrap(~ key, scales = "free") +
     geom_histogram()
 ```
+*Figure 8: Skewed variables.*
 
 In order to address this skewness and attempt to normalize these features for future modeling, we will employ box-cox transformations. Because some of these values include 0, we will need to replace any zero values with infintesimmaly small, non-zero values.
 
-```{r}
+```{r, echo = FALSE}
 complete_data[complete_data == 0] <- 1e-6
 
 complete_eval_data[complete_eval_data == 0] <- 1e-6
 ```
 
-After we use `powerTransform` to do the Box-Cox transformation, we than delete the original columns from `complete_data` using the `select` function from dplyr. Than use the `cbind` function to append the `transformed_data` to the `complete_data`. 
-
-
-```{r}
+The $\lambda$'s that were used to transform the skewed variables are shown on Table 2.
+```{r, message = FALSE, echo = FALSE}
 
 skewed_vars <- "bat_3b, bas_sb, bas_cs, f_e, p_bb, p_h"
 
@@ -383,7 +396,7 @@ complete_data <- cbind(subset(complete_data, select = eval(parse(text = paste("-
 
 
 
-```{r}
+```{r, message = FALSE, echo = FALSE}
 
 lambdas <- powerTransform(eval(parse(text = paste("cbind(",skewed_vars,")", "~ 1"))), complete_eval_data)
 
@@ -397,30 +410,46 @@ complete_eval_data <- cbind(subset(complete_eval_data, select = eval(parse(text 
 
 ```{r echo = FALSE}
 complete_data %>%
+  dplyr::select(c(bat_3b, bas_sb, bas_cs, f_e, p_bb, p_h)) %>%
   keep(is.numeric) %>% 
   gather() %>% 
   ggplot(aes(value)) +
     facet_wrap(~ key, scales = "free") +
     geom_histogram()
 ```
+*Figure 9: Histograms for transformed variables.*
 
 
-```{r echo = FALSE}
-complete_data %>%
-  select(c(bat_3b, bas_sb, bas_cs, f_e, p_bb, p_h)) %>%
-  keep(is.numeric) %>% 
-  gather() %>% 
-  ggplot(aes(value)) +
-    facet_wrap(~ key, scales = "free") +
-    geom_histogram()
+```{r tablexxx, echo=FALSE, message=FALSE, warnings=FALSE, results='asis'}
+tabl <- "
+|Column Name|$\\lambda$|
+|---------------|-------------:|
+|bat_3b|0.400|
+|bas_sb|0.220|
+|bas_cs|0.232|
+|f_e|-0.753|
+|p_bb|0.460|
+|p_h|-2.034|
+"
+cat(tabl) # output the table in a format good for HTML/PDF/docx conversion
 ```
+*Table 2: $\lambda$'s for skewed variables.*
+
+
 As we can see from the above, the boxcox transformations on the selected features performed extremely well. We can see that all features included now exhibit normal or near-normal distributions around their respective centers.
 
 ### Dealing with Bimodal Variables
 
-Bimodal distributions in data are interesting, in that they represent features which actually contain multiple (2) inherent systems resulting in separated distributional peaks. Our approach to solving this is to create dummy variables representing which side of the local minimum each datapoint falls with respect to it's original bimodal distribution.
+Bimodal distributions in data are interesting, in that they represent features which actually contain multiple (2) inherent systems resulting in separated distributional peaks. Figure XX shows that bimodality is present in `bat_so`, `p_hr`, `bat_hr`. While a Box-Cox transformation could have been undertaken in order to transform the bimodal variables to a normal distribution. However, this throws away important information that is inherent in the bimodal variable itself. The fact that the variable is bimodal in the first place is essentially ignored, and the predicted values in the linear multiple regression model will not reflect this bimodality. 
 
-```{r}
+Our approach to solving this is to create dummy variables representing which side of the local minimum each datapoint falls with respect to it's original bimodal distribution. First, two histograms were fit to these variables using the `mixtools` package. Then, the intersection point between the two histograms was determined by [solving for $c$](https://stats.stackexchange.com/questions/103800/calculate-probability-area-under-the-overlapping-area-of-two-normal-distributi). Where
+
+$$c = \frac{\mu_2\sigma_1^2 - \sigma_2(\mu_1\sigma_2 + \sigma_1\sqrt{(\mu_1 - \mu_2)^2 + 2(\sigma_1^2 - \sigma_2^2)log\frac{\sigma_1}{\sigma_2}})}{\sigma_1^2 - \sigma_2^2}$$
+Where $\mu_1$ and $\sigma_1$ are the mean and standard deviation for the left distribution and $\nu_2$ and $\sigma_2$ are the mean and standard deviation for the right distribution. 
+
+A new variable was created for each bimodal predictor, where any observed values below $c$ would be assigned a value of 0, while any observed values above $c$ would be assigned a value of 1. For example, $c$ for `bat_so` was calculated to be 806.39. `bi_bat_so` is a new dummy variable that was created where any values above 806.39 in the original `bat_so` data were assigned a value of 0, while values below 806.39 were assigned a value of 1. The $\lambda$'s for the three bimodal variables are shown in Table XX. The counts for the unique values are shown in each dummy variable are shown on the barcharts on Figure XXX.
+
+```{r, message = FALSE, echo = FALSE}
 # Finds where two histograms intersect
 histogram_intersection <- function(mu_1, mu_2, sigma_1, sigma_2){
   if (sigma_1 == sigma_2) stop('Both Sigmas are the same. Get 1/0')
@@ -442,9 +471,13 @@ create_bimodal_cutoff <- function(bimodal_var, df){
   
   cutoff <- histogram_intersection(mu_1, mu_2, sigma_1, sigma_2)
   
+  # print(paste(text = "mu for ", bimodal_var, ": ", mixmdl$mu))
+  # print(paste(text = "sigma for ", bimodal_var, ": ", mixmdl$sigma))
+  # print(paste(text = "cutoff for", bimodal_var, ": ", cutoff))
+  
   plot(mixmdl,which=2)
   lines(density(bimodal_var_data), lty=2, lwd=2)
-  abline(v = cutoff)
+  abline(v = cutoff, lwd = 5, col = "red", lty = "dashed")
   return(cutoff)
 }
 
@@ -453,50 +486,87 @@ create_bimodal_cutoff <- function(bimodal_var, df){
 # variables, they are converted from `numeric` to `factor`s using the `factor`
 # function.
 append_bimodal_dummy_var <- function(cutoff, bimodal_var, df){
-  df[,paste("bi", bimodal_var, sep = "_")] <- factor((df[,bimodal_var] < cutoff) * 1)
+  df[,paste("bi", bimodal_var, sep = "_")] <- (df[,bimodal_var] < cutoff) * 1
   return(df)
 }
 
 # Creates dummy variables based on bimodal data. 
-create_bimodal_dummy_var <- function(bimodal_var, df){
-  cutoff <- create_bimodal_cutoff(bimodal_var, df)
+create_bimodal_dummy_var <- function(bimodal_var, df, cutoff = 0, data = "train"){
+  if (data == "train"){
+    cutoff <- create_bimodal_cutoff(bimodal_var, df)
+  }
   df <- append_bimodal_dummy_var(cutoff, bimodal_var, df)
   return(df)
 }
 
 ```
 
-```{r}
-for (bimodal_var in c("bat_so", "p_hr", "bat_hr")){
-  complete_data <- create_bimodal_dummy_var(bimodal_var, complete_data)
+
+```{r, message = FALSE, echo = FALSE, results = 'hide', fig.keep='all', fig.height=8}
+bimodal_vars <- c("bat_so", "p_hr", "bat_hr")
+
+par(mfrow = c(3, 1))
+for (bimodal_var in bimodal_vars) {
+  complete_data <- create_bimodal_dummy_var(bimodal_var = bimodal_var, df = complete_data)
 }
-```
 
-```{r}
-for (bimodal_var in c("bat_so", "p_hr", "bat_hr")){
-  complete_eval_data <- create_bimodal_dummy_var(bimodal_var, complete_eval_data)
+#The cutoffs for these variables were determined using the cutoff determined from the training data.
+complete_eval_data <- create_bimodal_dummy_var(bimodal_var = "bat_so", df = complete_eval_data, data = "eval", cutoff = 806.3912360026)
+
+complete_eval_data <- create_bimodal_dummy_var(bimodal_var = "p_hr", df = complete_eval_data, data = "eval", cutoff = 60.9249073181497)
+
+complete_eval_data <- create_bimodal_dummy_var(bimodal_var = "bat_hr", df = complete_eval_data, data = "eval", cutoff = 54.9342731376338)
+
+```
+*Figure 10: Density curves for each bimodal predictor with two normal distributions fit to each peak. *
+
+
+```{r tablexy, echo=FALSE, message=FALSE, warnings=FALSE, results='asis'}
+tabl <- "
+|Column Name|$\\mu_1$|$\\mu_2$|$\\sigma_1$|$\\sigma_2$|$c$|Count of $0$'s|Count of $1$'s|
+|---------------|:-------------:|:-------------:|:-------------:|-------------:|:-------------:|-------------:|
+|bat_so|606.31|972.61|199.88|114.06|806.38|969|1307|
+|p_hr|31.43|127.37|14.39|52.08|60.93|1602|674|
+|bat_hr|26.55|125.06|13.10|48.72|54.93|1583|693|
+"
+cat(tabl) # output the table in a format good for HTML/PDF/docx conversion
+```
+*Table 3: Summary of bimodal dummy variable generation*
+
+
+```{r echo=FALSE}
+
+test_data <- data.frame(complete_data)
+test_data$bi_bat_so <- factor(test_data$bi_bat_so)
+test_data$bi_p_hr <- factor(test_data$bi_p_hr)
+test_data$bi_bat_hr <- factor(test_data$bi_bat_hr)
+
+
+par(mfrow = c(1, 3))
+for (var in paste("bi_", bimodal_vars, sep = "")){
+  plot(test_data[,var], xlab = var)
 }
+
+
 ```
+*Figure 11: Bar graphs for each of the bimodal dummy variables. $0$ represents the amount of observations for the original variable where the value was above $c$, while $1$ represents the amount of observations below $c$*
 
-
-### Add SABER analysis
-
-Saber Model
+### Saber Model
 
 Finally, we would like to employ outside analysis in order to engineer new, potentially powerful features. Popularized in the movie "Moneyball", the SABERMETRICS model for baseball analysis includes a feature known as BsR (base runs). This statistic estimates the amount of runs a team should score. 
 
 (see http://tangotiger.net/wiki_archive/Base_Runs.html for more information). The formula for constructing this metric is as follows:
 
-BSR = A*B/(B+A)+C where:
+$$BSR = AB/(B+A)+C$$
 
-A = TEAM_BATTING_1B + TEAM_BATTING_2B + TEAM_BATTING_3B + TEAM_BATTING_BB
+where:
 
-B = 1.02(1.4TEAM_TOTAL_BASES -0.6TEAM_BATTING_H + 0.1TEAM_BATTING_BB)
+$$A = TEAM \_ BATTING\_1B + TEAM\_BATTING\_2B + TEAM\_BATTING\_3B + TEAM\_BATTING\_BB$$
 
-C = TEAM_BATTING_HR
+$$B = 1.02(1.4TEAM\_TOTAL\_BASES -0.6TEAM\_BATTING\_H + 0.1TEAM\_BATTING\_BB)$$
 
-
-```{r}
+$$C = TEAM\_BATTING\_HR$$
+```{r, echo = FALSE}
 complete_data$bat_1b <- complete_data$bat_h - complete_data$bat_2b - complete_data$bat_3b - complete_data$bat_hr
 complete_data$total_bases <- complete_data$bat_1b + 2*complete_data$bat_2b + 3*complete_data$bat_3b + 4*complete_data$bat_hr
 
@@ -508,7 +578,7 @@ C <- complete_data$bat_hr
 complete_data$saber <- A*B/(B+A)+C
 ```
 
-```{r}
+```{r, echo = FALSE}
 complete_eval_data$bat_1b <- complete_eval_data$bat_h - complete_eval_data$bat_2b - complete_eval_data$bat_3b - complete_eval_data$bat_hr
 
 complete_eval_data$total_bases <- complete_eval_data$bat_1b + 2*complete_eval_data$bat_2b + 3*complete_eval_data$bat_3b + 4*complete_eval_data$bat_hr
@@ -521,6 +591,11 @@ C <- complete_eval_data$bat_hr
 complete_eval_data$saber <- A*B/(B+A)+C
 ```
 
+```{r, echo = FALSE}
+hist(complete_data$saber, main = "", xlab = "BSR", ylab = "Count")
+```
+*Figure 12: Histogram of BSR Predictor*
+
 ### Reviewing the correlations
 
 After performing multiple cleaning and imputation steps, we would like to visualize again the correlations between features and their target, as well as between features themselves.
@@ -532,6 +607,8 @@ cor_numeric <- complete_data %>%
 
 corrplot(cor(cor_numeric), method = 'number', type = 'lower', diag = FALSE, number.cex = 0.5, tl.cex = 0.5)
 ```
+*Figure 13: Feature correlation plot after data preparation*
+
 
 These correlation values make much more sense than before. We can see that features no longer have 1.0 correlations, which in general are highly unlikely to occur naturally. The new most correlated (and least correlated) features are as follows:
 
@@ -541,7 +618,7 @@ These correlation values make much more sense than before. We can see that featu
 
 - bat_so & p_so (0.87): These features intuitively should not have such high correlation. Similar to above, we would not expect the performance of batter strikeouts to have any relationship to the performance of pitching strikouts on the same team.
 
-```{r echo = FALSE}
+```{r message = FALSE, echo = FALSE}
 cor_numeric <- complete_data %>%
   keep(is.numeric)
 bb_games_melted <- melt(cor_numeric, "target")
@@ -551,11 +628,14 @@ ggplot(data = bb_games_melted, aes(value, target)) +
   geom_smooth(method = "lm")
 
 ```
+*Figure 14: Target correlation plot after cleaning.*
+
+
 After applying all transformations and imputations, we can see that the feature correlation with the target variable has also improved. Features predicted to have positive correlations (as provided by the assignment guide) do tend to have positive correlations. Similarly, features with expected negative correlations behave as described. This provides us some level of validation as we take the next steps with model building.
 
 # Build Models
 
-```{r}
+```{r, message = FALSE, echo = FALSE}
 #create data frame with 0 rows and 3 columns
 tracker <- data.frame(matrix(ncol = 2, nrow = 0))
 
@@ -576,12 +656,12 @@ update_tracker <- function(tracker, model_name, model){
 
 Our first model (Base model) will use all of the initially provided columns, after cleaning and imputation. We will use the results of this model to understand a baseline for our future model development.
 
-```{r}
-base <- complete_data %>% select("target", "bat_h", "bat_2b", "bat_hr", "bat_bb", "bat_so", "p_h", "p_hr", "p_bb", "p_so", "f_dp", "bat_3b", "bas_sb", "bas_cs", "f_e")
+```{r, echo = FALSE}
+base <- complete_data %>% dplyr::select("target", "bat_h", "bat_2b", "bat_hr", "bat_bb", "bat_so", "p_h", "p_hr", "p_bb", "p_so", "f_dp", "bat_3b", "bas_sb", "bas_cs", "f_e")
 ```
 
 
-```{r}
+```{r, echo = FALSE}
 base_mdl <- lm(target~., data=base)
 tracker <- update_tracker(tracker, "Base Model", base_mdl)
 summary(base_mdl)
@@ -595,8 +675,8 @@ Based on the above output, we can see that this model performs relateively poorl
 
 The next model we would like to evaluate is the SABER model. Here we will use all original features, and additionally we will include the engineered SABER metrics. Hopefully we will see a lift in performance after utilizing these industry-derived features.
 
-```{r}
-mdl_inc_saber <- lm(target~., data=complete_data)
+```{r, echo = FALSE}
+mdl_inc_saber <- lm(target ~ ., data=complete_data)
 tracker <- update_tracker(tracker, "Saber Model", mdl_inc_saber)
 summary(mdl_inc_saber)
 ```
@@ -607,8 +687,8 @@ As expected, we did see a lift in perfomance after including SABER metrics. Howe
 
 Here we will test out a more parsimonious version of the above SABER model. In the spirit of simplifying the model for human use and understanding, we will select only the features that have high significance from the above SABER model. Additionally, we will exlude any features which were included as part of the construction of SABER, in order to reduce inherent multicollinearity.
 
-```{r}
-sab_reduced <- complete_data %>% select("target", "saber", "bi_bat_hr", "f_e", "bas_sb", "f_dp", "bat_so", "bat_bb")
+```{r, echo = FALSE}
+sab_reduced <- complete_data %>% dplyr::select("target", "saber", "bi_bat_hr", "f_e", "bas_sb", "f_dp", "bat_so", "bat_bb")
 
 sab_reduced_model <- lm(target~., data=sab_reduced)
 
@@ -622,10 +702,10 @@ While the Adjusted R^2 has been slightly reduced to 0.26, we have also significa
 
 ### Step AIC
 
-<make sure to connect base model to this>
+Step AIC works by deselecting features that negatively affect the AIC, which is a criterion similar to the R-squared. It selects the model with not only the best AIC score but also a model with less predictors than the full model, since the full model may have predictors that do not contribute or negatively contribute to the model's performance. The direction for the Step AIC algorithm was set to `both`, because this implements both forward and backward elimination in order to decide if a predictor negatively affects the model's performance.
 
 
-```{r}
+```{r, echo = FALSE}
 mdl_step.model <- stepAIC(base_mdl, direction = "both", trace = FALSE)
 
 tracker <- update_tracker(tracker, "Step AIC", mdl_step.model)
@@ -633,64 +713,63 @@ tracker <- update_tracker(tracker, "Step AIC", mdl_step.model)
 summary(mdl_step.model)
 ```
 
-<Add comments for this>
-
 ### Square Root Step AIC
 
-```{r}
+The following model was generated using the same AIC methodology, except that the `target` variable was square rooted.
+
+```{r, echo = FALSE}
 mdl_sqrt = lm(sqrt(target) ~ .,data = complete_data)
 ```
 
-```{r}
+```{r, message = FALSE, echo = FALSE}
 mdl_sqrt_step.model <- stepAIC(mdl_sqrt, direction = "both", trace = FALSE)
 tracker <- update_tracker(tracker, "Step AIC Sqrt", mdl_sqrt_step.model)
 summary(mdl_sqrt_step.model)
 ```
 
-<Add comments>
-
-### All models
-
-```{r eval=FALSE}
-mdl_all <- olsrr::ols_step_all_possible(mdl_inc_saber)
-```
-
-```{r Select top n models}
-
-top_n_models <- all_models %>%
-  arrange(desc(adjr)) %>%
-  slice(1:3)
-
-top_n_models$predictors[1]
-```
-
-<Add comments>
-
-
 # Model Selection
 
-### Review the tracker dataframe from training set
+```{r, message = FALSE, echo = FALSE}
 
-<load the tracker dataframe>
+colnames(tracker) <- c("model", "adj")
 
-<write a little about which we chose and why>
+ggplot(tracker, aes(x = model, y = adj)) +
+  geom_bar(stat = "identity") +
+  ylab("Adjusted R-Squared")
+```
 
-<high performance, low feature count, human understandability... whatever?>
+The model that is ultimately chosen for this analysis is Step AIC Square Root. We were able to increase over the base model by 3%. AIC is a measure of multicollinearity so the selection process parsed out variables that were highly colinear with other variables, giving us a model that has the lowest AIC values based on a select number of predictors.
+This is important because this model needs to be used and understood by professionals in the industry; the step AIC model ensures that only the most prominent features are included.
 
-### Evaluate all of the models on the eval set
 
-<build an eval tracker>
+```{r, message = FALSE, echo = FALSE}
+par(mfrow = c(2, 2))
+plot(mdl_sqrt_step.model)
+```
 
-<we can make a barplot from the data tracker>
+The QQ plot shows that the data is centered in the middle, but there is significant amount of residuals in the middle of the distribution. This is known as the "thin tail" phenomenon. Normal distributions with "thin tails” correspond to the first quantiles occurring at larger than expected values and the last quantiles occurring at less than expected values. Notice that the “thin tailed” Q-Q plot is a reflection of a “fat tailed” Q-Q plot, which is the opposite phenomenon, across the X-Y diagonal. The Residuals vs. Fitted, and scale-location plots show that the residuals are mostly centered around the zero line. However there is some skewness as a result of outliers that are marked numerically on the plot itself. The Residuals vs. Leverage plot shows that there are no residual values that exceed Cook's distance, which is good.
 
-### Select a model
 
-<based on the previous step, choose a model with high score and optimally less features>
+#### Important Metrics for Step AIC Square Root Model
+Important metrics for the Step AIC Square Root model are:
 
-<look at the metrics for R^2, RSME - talk about how close we are compared to how it did on the training set>
+- R-squared: 0.3027
+- F-statistic: 71.54
+- RSS: 1366.88
+- MSE: 0.6
+- RMSE: 0.774
 
-< make a regression plot>
+Note
+#### Predictions on Evaluation Set
 
-< a little talk about if it makes sense, what works, what doesn't, what other features might have been helpful if we had them... random stuff.>
+The predictions were generated using the evaluation set on the Square Root Step AIC model. These predictions are provided in the `predictions.csv` file.
 
+
+```{r, echo = FALSE}
+predictions <- predict(mdl_sqrt_step.model, complete_eval_data) ** 2
+```
+
+```{r, echo = FALSE}
+write.csv(predictions, "predictions.csv")
+```
 
