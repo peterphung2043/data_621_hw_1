@@ -88,7 +88,7 @@ Another question we had was one of outliers- some of the values were way too hig
 
 Below we can see very quickly that some variables have extreme outliers. 
 
-```{r message = FALSE, echo = FALSE}
+```{r warning = FALSE, message = FALSE, echo = FALSE, results = 'hide', fig.keep='all'}
 ggplot(stack(train), aes(x = ind, y = values)) +
   geom_boxplot() + 
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
@@ -370,14 +370,14 @@ train %>%
 
 In order to address this skewness and attempt to normalize these features for future modeling, we will employ box-cox transformations. Because some of these values include 0, we will need to replace any zero values with infintesimmaly small, non-zero values.
 
-```{r, echo = FALSE}
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
 complete_data[complete_data == 0] <- 1e-6
 
 complete_eval_data[complete_eval_data == 0] <- 1e-6
 ```
 
 The $\lambda$'s that were used to transform the skewed variables are shown on Table 2.
-```{r, message = FALSE, echo = FALSE}
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
 
 skewed_vars <- "bat_3b, bas_sb, bas_cs, f_e, p_bb, p_h"
 
@@ -395,8 +395,7 @@ complete_data <- cbind(subset(complete_data, select = eval(parse(text = paste("-
 ```
 
 
-
-```{r, message = FALSE, echo = FALSE}
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
 
 lambdas <- powerTransform(eval(parse(text = paste("cbind(",skewed_vars,")", "~ 1"))), complete_eval_data)
 
@@ -408,14 +407,14 @@ complete_eval_data <- cbind(subset(complete_eval_data, select = eval(parse(text 
 ```
 
 
-```{r echo = FALSE}
+```{r warning = FALSE, message = FALSE, echo = FALSE, results = 'hide', fig.keep='all'}
 complete_data %>%
   dplyr::select(c(bat_3b, bas_sb, bas_cs, f_e, p_bb, p_h)) %>%
   keep(is.numeric) %>% 
   gather() %>% 
   ggplot(aes(value)) +
     facet_wrap(~ key, scales = "free") +
-    geom_histogram()
+    geom_histogram(bins = 35)
 ```
 *Figure 9: Histograms for transformed variables.*
 
@@ -502,7 +501,7 @@ create_bimodal_dummy_var <- function(bimodal_var, df, cutoff = 0, data = "train"
 ```
 
 
-```{r, message = FALSE, echo = FALSE, results = 'hide', fig.keep='all', fig.height=8}
+```{r, message = FALSE, echo = FALSE, results = 'hide', fig.keep='all', fig.height=6}
 bimodal_vars <- c("bat_so", "p_hr", "bat_hr")
 
 par(mfrow = c(3, 1))
@@ -618,7 +617,7 @@ These correlation values make much more sense than before. We can see that featu
 
 - bat_so & p_so (0.87): These features intuitively should not have such high correlation. Similar to above, we would not expect the performance of batter strikeouts to have any relationship to the performance of pitching strikouts on the same team.
 
-```{r message = FALSE, echo = FALSE}
+```{r warning = FALSE, message = FALSE, echo = FALSE}
 cor_numeric <- complete_data %>%
   keep(is.numeric)
 bb_games_melted <- melt(cor_numeric, "target")
@@ -664,7 +663,7 @@ base <- complete_data %>% dplyr::select("target", "bat_h", "bat_2b", "bat_hr", "
 ```{r, echo = FALSE}
 base_mdl <- lm(target~., data=base)
 tracker <- update_tracker(tracker, "Base Model", base_mdl)
-summary(base_mdl)
+sumary(base_mdl)
 ```
 
 
@@ -678,12 +677,12 @@ The next model we would like to evaluate is the SABER model. Here we will use al
 ```{r, echo = FALSE}
 mdl_inc_saber <- lm(target ~ ., data=complete_data)
 tracker <- update_tracker(tracker, "Saber Model", mdl_inc_saber)
-summary(mdl_inc_saber)
+sumary(mdl_inc_saber)
 ```
 
 As expected, we did see a lift in perfomance after including SABER metrics. However, the lift was hardly significant. We are still below 0.3 Adjusted R^2.
 
-## SABER reduced
+### SABER reduced
 
 Here we will test out a more parsimonious version of the above SABER model. In the spirit of simplifying the model for human use and understanding, we will select only the features that have high significance from the above SABER model. Additionally, we will exlude any features which were included as part of the construction of SABER, in order to reduce inherent multicollinearity.
 
@@ -694,7 +693,7 @@ sab_reduced_model <- lm(target~., data=sab_reduced)
 
 tracker <- update_tracker(tracker, "Saber Reduced", sab_reduced_model)
 
-summary(sab_reduced_model)
+sumary(sab_reduced_model)
 ```
 
 While the Adjusted R^2 has been slightly reduced to 0.26, we have also significantly reduced the complexity of the model. This provides value in itself, as the model can be more easily distributed to players and coaches.
@@ -710,7 +709,7 @@ mdl_step.model <- stepAIC(base_mdl, direction = "both", trace = FALSE)
 
 tracker <- update_tracker(tracker, "Step AIC", mdl_step.model)
 
-summary(mdl_step.model)
+sumary(mdl_step.model)
 ```
 
 ### Square Root Step AIC
@@ -724,7 +723,7 @@ mdl_sqrt = lm(sqrt(target) ~ .,data = complete_data)
 ```{r, message = FALSE, echo = FALSE}
 mdl_sqrt_step.model <- stepAIC(mdl_sqrt, direction = "both", trace = FALSE)
 tracker <- update_tracker(tracker, "Step AIC Sqrt", mdl_sqrt_step.model)
-summary(mdl_sqrt_step.model)
+sumary(mdl_sqrt_step.model)
 ```
 
 # Model Selection
@@ -759,7 +758,7 @@ Important metrics for the Step AIC Square Root model are:
 - MSE: 0.6
 - RMSE: 0.774
 
-Note
+
 #### Predictions on Evaluation Set
 
 The predictions were generated using the evaluation set on the Square Root Step AIC model. These predictions are provided in the `predictions.csv` file.
