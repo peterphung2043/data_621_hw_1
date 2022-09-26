@@ -1,0 +1,165 @@
+---
+title: "Final_1"
+author: "Krutika Patel"
+date: '2022-09-23'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 1 Data Exploration
+
+```{r}
+suppressPackageStartupMessages(library(tidyverse))
+```
+
+
+# Importing the datasets
+```{r eval-load, eval=FALSE}
+#import dataset: moneyball_evaluation_data
+eval <- read_csv("moneyball-evaluation-data.csv")
+```
+
+```{r train-load, eval=FALSE}
+#import dataset: moneyball_training_data
+train <- read_csv("moneyball-training-data.csv")
+```
+
+# Viewing Data
+```{r}
+head(eval)
+```
+
+```{r}
+head(train)
+```
+
+# Column Names
+```{r}
+as.data.frame(colnames(eval))
+```
+
+```{r}
+as.data.frame(colnames(train))
+```
+
+# Data Subset
+```{r}
+#remove/separate index column from dataset
+head(eval)
+new_eval <- subset(eval, select = -INDEX)
+eval_index <- eval$INDEX
+```
+
+```{r}
+new_train <- subset(train, select = -INDEX)
+train_index <- train$INDEX
+```
+
+# Summary Statistics
+```{r}
+summary(train)
+```
+
+# NA exploration
+```{r}
+sapply(new_train, function(x) sum(is.na(x)))
+```
+
+```{r}
+suppressPackageStartupMessages(library("visdat"))
+```
+
+```{r}
+new_train  %>%
+  summarise_all(list(~is.na(.)))%>%
+  pivot_longer(everything(),
+               names_to = "variables", values_to="missing") %>%
+  count(variables, missing) %>%
+  ggplot(aes(y=variables,x=n,fill=missing))+
+  geom_col()+
+  scale_fill_manual(values=c("skyblue3","gold"))+
+  theme(axis.title.y=element_blank()) + theme_classic()
+
+```
+
+```{r}
+suppressPackageStartupMessages(library("VIM"))
+```
+
+```{r}
+aggr_plot <- aggr(new_train, col=c('navyblue','red'), numbers=TRUE, sortVars=TRUE, labels=names(new_train), cex.axis=.48, gap=2, ylab=c("Histogram of missing data","Pattern"))
+```
+
+```{r}
+suppressPackageStartupMessages(library("scales"))
+```
+
+
+```{r}
+library("DataExplorer")
+```
+
+
+```{r}
+plot_missing(new_train, missing_only = TRUE, geom_label_args = list("size" = 3, "label.padding" = unit(0.1, "lines")))
+```
+
+# Correlation Plots
+```{r}
+suppressPackageStartupMessages(library(corrplot))
+```
+
+
+```{r}
+#correlation matrix
+#using only pairwise-complete observations to avoid NA values
+M <- cor(new_train, use="pairwise.complete.obs")
+
+#visualizing correlogram
+corrplot(M, method="circle", tl.col = "black", tl.cex = 0.6, tl.srt = 70)
+
+#as pie
+corrplot(M, method = "pie", tl.col = "black", tl.cex = 0.6, tl.srt = 70 )
+
+#as color
+corrplot(M, method = "color", tl.col = "black", tl.cex = 0.6, tl.srt = 70)
+
+#as number
+corrplot(M, method = "number", tl.col = "black", tl.cex = 0.6, tl.srt = 70)
+```
+
+# Boxplots
+
+Apply the `pivot_longer function` to reshape some of the columns of our data from wide to long format:
+```{r}
+#Reshape data frame
+train_long <- pivot_longer(new_train,
+                          c("TARGET_WINS", "TEAM_BATTING_H", "TEAM_BATTING_2B", "TEAM_BATTING_3B", "TEAM_BATTING_HR", "TEAM_BATTING_BB", "TEAM_BATTING_SO", "TEAM_BASERUN_SB", "TEAM_BASERUN_CS", "TEAM_BATTING_HBP", "TEAM_PITCHING_H", "TEAM_PITCHING_HR", "TEAM_PITCHING_BB", "TEAM_PITCHING_SO", "TEAM_FIELDING_E", "TEAM_FIELDING_DP"))
+```
+
+
+Apply the ggplot and geom_boxplot functions to the `train_long` data to visualize each of the selected columns in a side-by-side boxplot graphic:
+```{r message=FALSE, warning=FALSE}
+#Draw boxplots
+#rows containing non-finite value (stat_boxplot) removed NA rows
+ggplot(train_long, 
+       aes(x = log(value),
+           fill = name)) +
+  geom_boxplot()
+```
+
+# Histograms
+
+Creating a histogram for each of our columns, and using the `facet_wrap function` to separate each column in its own plotting panel:
+
+```{r}
+#Draw histograms
+ggplot(train_long, 
+       aes(x = log(value))) +
+  geom_histogram(bins = 15) +
+  facet_wrap(name ~ ., scales = "free")
+```
+

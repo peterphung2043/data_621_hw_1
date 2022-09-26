@@ -1,0 +1,44 @@
+---
+title: "Final_3"
+author: "Krutika Patel"
+date: '2022-09-23'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r eval-load, eval=FALSE}
+#import dataset: moneyball_evaluation_data
+original <- read_csv("../data/moneyball-training-data.csv")
+original <- subset(original, select = -INDEX)
+train <- read_csv("../data/final_clean_train.csv")
+eval <- read_csv("../data/final_clean_eval.csv")
+```
+
+
+
+### Review the tracker dataframe from training set
+
+<load the tracker dataframe>
+
+<write a little about which we chose and why>
+
+<high performance, low feature count, human understandability... whatever?>
+
+### Evaluate all of the models on the eval set
+
+<build an eval tracker>
+
+<we can make a barplot from the data tracker>
+
+### Select a model
+
+<based on the previous step, choose a model with high score and optimally less features>
+
+<look at the metrics for R^2, RSME - talk about how close we are compared to how it did on the training set>
+
+< make a regression plot>
+
+< a little talk about if it makes sense, what works, what doesn't, what other features might have been helpful if we had them... random stuff.>

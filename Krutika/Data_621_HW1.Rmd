@@ -1,0 +1,153 @@
+---
+title: "Data 621 HW 1"
+author: "Krutika Patel"
+date: '2022-09-17'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r warning=FALSE, message=FALSE}
+library(tidyverse)
+library(olsrr)
+library(GGally)
+library(reshape)
+```
+
+
+# moneyball-evaluation-data.csv
+# moneyball-training-data.csv
+
+# 1 Data Exploration
+
+```{r Load Data}
+#Local
+
+eval <- as.data.frame(read.csv('moneyball-evaluation-data.csv'))
+train <- as.data.frame(read.csv('moneyball-training-data.csv'))
+```
+
+```{r Data Summary}
+# Column Names
+colnames(train)
+
+# Data Summary
+summary(train)
+
+# First 5 rows of eval
+head(train)
+
+# NA's by Column
+sapply(train, function(x) sum(is.na(x)))
+
+# Select Necessary Data
+# Remove index col
+data <- train[-1]
+```
+
+```{r Mean and Standard Deviation}
+# Mean and SD
+m_sd <- data.frame(matrix(data=NA, 1,2))
+colnames(m_sd) <- c('Mean', 'Standard_Deviation')
+for(col in data)
+{
+  m_sd[nrow(m_sd) + 1,] = c(mean(col, na.rm = TRUE), sd(col, na.rm = TRUE))
+}
+m_sd <- m_sd[-1,]
+m_sd
+```
+
+```{r Graphics}
+pairs(data)
+```
+
+```{r}
+plot <- melt(train, "TARGET_WINS")
+ggplot(data = plot, aes(value, TARGET_WINS)) +
+  geom_point() +
+  facet_wrap(.~variable, scales = "free") +
+  geom_smooth(method = "lm")
+```
+```{r Renaming Columns based on impact}
+data2 <- data
+pos <- c("TEAM_BATTING_H", "TEAM_BATTING_1B", "TEAM_BATTING_2B", "TEAM_BATTING_3B", "TEAM_BATTING_HR", "TEAM_BATTING_BB",  "TEAM_BATTING_HBP", "TEAM_BASERUN_SB", "TEAM_FIELDING_DP", "TEAM_PITCHING_SO")
+
+for(i in seq(1,length(colnames(data2))))
+  {
+    if(colnames(data2)[i] != 'TARGET_WINS')
+    {
+      if(colnames(data2)[i] %in% pos)
+      {
+        colnames(data2)[i] <- paste('P_',colnames(data2)[i],sep = '')
+      }
+      else
+      {
+        colnames(data2)[i] <- paste('N_',colnames(data2)[i],sep = '')
+      }
+    }
+}
+colnames(data2)
+```
+
+# 2 Data Preperation
+
+
+```{r}
+# Simplest Data preperation
+# Replacing NA's with mean/median
+
+for(col in train)
+{
+  col[is.na(col)] <- mean(col) #median(col)
+}
+
+```
+
+# Data Selection
+
+Creating 1HB column from columns 2-6
+
+```{r}
+data <- train[-1]
+data <- data %>% mutate(TEAM_BATTING_1B = TEAM_BATTING_H - sum(TEAM_BATTING_2B+TEAM_BATTING_3B+TEAM_BATTING_HR))
+eval <- eval %>% mutate(TEAM_BATTING_1B = TEAM_BATTING_H - sum(TEAM_BATTING_2B+TEAM_BATTING_3B+TEAM_BATTING_HR))
+```
+
+
+# 3 Build Models`
+
+```{r}
+# Simple Linear Regression Model
+
+lm <- lm(TARGET_WINS ~ TEAM_BATTING_H + TEAM_BATTING_BB + TEAM_BATTING_HBP, data = data)
+p_tw <- data.frame('Predicted Target Wins' = predict(lm,eval))
+p_tw
+paste('NA Count = ',sapply(p_tw, function(x) sum(is.na(x))), ' Prop = ', round(sapply(p_tw, function(x) sum(is.na(x)))/nrow(p_tw),3))
+```
+
+```{r All possible models}
+# Run all possible models using library olsrr
+model <- lm(TARGET_WINS ~ TEAM_BATTING_H + TEAM_BATTING_2B + TEAM_BATTING_3B + TEAM_BATTING_HR + TEAM_BATTING_BB + TEAM_BATTING_SO + TEAM_BASERUN_SB + TEAM_BASERUN_CS +  TEAM_BATTING_HBP + TEAM_PITCHING_H + TEAM_PITCHING_HR + TEAM_PITCHING_BB + TEAM_PITCHING_SO + TEAM_FIELDING_E + TEAM_FIELDING_DP, data = train)
+
+all_models <- olsrr::ols_step_all_possible(model)
+
+```
+
+```{r}
+all_models
+```
+Double check lm model to see if we get the same adj r^2
+
+# 4 Select Models
+
+```{r Select top n models}
+
+top_n_models <- all_models %>%
+  arrange(desc(adjr)) %>%
+  slice(1:3)
+
+top_n_models$predictors[1]
+```
+
