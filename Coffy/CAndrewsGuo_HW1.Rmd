@@ -183,10 +183,14 @@ suppressPackageStartupMessages(library("VIM"))
 
 
 ### Option 2.
+
+The aggr function creates two plots that give a quick visualization of two things:
+1. What percent of each variable is missing
+2. The missingness frequencies of pairs of variables
 ```{r message=FALSE, warning=FALSE}
 aggr_plot <- aggr(new_train, col=c('navyblue','red'), numbers=TRUE, sortVars=TRUE, labels=names(new_train), cex.axis=.48, gap=2, ylab=c("Histogram of missing data","Pattern"))
 ```
-The plot indicates that almost 57% of the samples are missing information, 92% are missing the `TEAM_BATTING_HBP` value, and the remaining ones show other missing patterns.  
+In the first plot we see that six variables have missing data (red color). The second plot shows that only one pair of variables are complete.  The plot indicates that almost 57% of the samples are missing information and 92% are missing values from the `TEAM_BATTING_HBP` variable. The remaining ones show other missing patterns.  
 
 
 ### Option 3. 
@@ -291,6 +295,16 @@ ggplot(train_long,
   facet_wrap(name ~ ., scales = "free")
 ```
 In (Figure x) illustrates `train` data frame columns in separate histograms. Note that the scales of some panels are different.
+---
+
+10. Two-Way ANOVA Test
+https://rc2e.com/linearregressionandanova
+
+```{r}
+anova <- aov(TARGET_WINS ~ ., new_train)
+summary(anova)
+```
+
 
 ---
 
@@ -452,7 +466,7 @@ We will check this after we make the model
 
 ## BUILD MODELS
 
-### Multiple Linear Regression Model
+**Multiple Linear Regression Model**
 
 ```{r}
 library(caTools)
@@ -471,6 +485,27 @@ mlr = lm(formula = TARGET_WINS ~ .,
                data = new_train)
 ```
 
+
+1. Checking Assumptions of the Model
+```{r}
+hist(residuals(mlr), col = "steelblue")
+```
+The distribution is bell-shaped with a normal distribution.
+
+
+2. Checking homoskedasticity where the variance of the residuals should be consistent for all observations.
+```{r}
+#create fitted value vs residual plot
+plot(fitted(mlr), residuals(mlr))
+
+#add horizontal line at 0
+abline(h = 0, lty = 2)
+```
+
+The residuals should be equally scattered at every fitted value. The plot shows that the scatter is densely concentrated and seems evenly fitted between values. 
+
+
+3. Interpret the Ouput of the Model
 ```{r}
 summary(mlr)
 ```
@@ -487,15 +522,34 @@ mlrstep.model <- stepAIC(mlr, direction = "both",
 summary(mlrstep.model)
 ```
 
+
 ----(Model 2)----
+**Square Root Transformation | Poisson distribution**
 
 ```{r}
 mlr2 = lm(sqrt(TARGET_WINS) ~ .,
                data = new_train)
-summary(mlr2)
+
 ```
 
-**Square Root Transformation | Poisson distribution**
+1. Checking Assumptions of the Model
+```{r}
+hist(residuals(mlr2), col = "steelblue")
+```
+
+
+```{r}
+#create fitted value vs residual plot
+plot(fitted(mlr2), residuals(mlr2))
+
+#add horizontal line at 0
+abline(h = 0, lty = 2)
+```
+
+
+```{r}
+summary(mlr2)
+```
 
 page 78 - Linear Model
 
@@ -505,6 +559,128 @@ mlr2step.model <- stepAIC(mlr2, direction = "both",
                       trace = FALSE)
 summary(mlr2step.model)
 ```
+
+
+**Polynomial Regression**
+
+```{r}
+#randomly shuffle data
+train.shuffled <- new_train[sample(nrow(new_train)),]
+
+#define number of folds to use for k-fold cross-validation
+K <- 10 
+
+#define degree of polynomials to fit
+degree <- 5
+
+#create k equal-sized folds
+folds <- cut(seq(1,nrow(train.shuffled)),breaks=K,labels=FALSE)
+
+#create object to hold MSE's of models
+mse = matrix(data=NA,nrow=K,ncol=degree)
+
+#Perform K-fold cross validation
+for(i in 1:K){
+    
+    #define training and testing data
+    testIndexes <- which(folds==i,arr.ind=TRUE)
+    testData <- train.shuffled[testIndexes, ]
+    trainData <- train.shuffled[-testIndexes, ]
+    
+    #use k-fold cv to evaluate models
+    for (j in 1:degree){
+        fit.train = lm(TARGET_WINS ~ TEAM_BATTING_H + poly(TEAM_BATTING_2B,j) + TEAM_BATTING_3B + TEAM_BATTING_HR + TEAM_BATTING_BB + TEAM_BATTING_SO + TEAM_BASERUN_SB + TEAM_BASERUN_CS + TEAM_BATTING_HBP + TEAM_PITCHING_H + TEAM_PITCHING_HR + TEAM_PITCHING_BB + TEAM_PITCHING_SO + TEAM_FIELDING_E + TEAM_FIELDING_DP, data=trainData)
+        fit.test = predict(fit.train, newdata=testData)
+        mse[i,j] = mean((fit.test-testData$TARGET_WINS)^2) 
+    }
+}
+
+#find MSE for each degree 
+colMeans(mse)
+```
+
+The model with the lowest test MSE turned out to be the polynomial regression model with degree h = 5.
+
+Analyze the final model
+```{r}
+#fit best model
+best = lm(TARGET_WINS ~ TEAM_BATTING_H + poly(TEAM_BATTING_2B,5, raw=T) + TEAM_BATTING_3B + TEAM_BATTING_HR + TEAM_BATTING_BB + TEAM_BATTING_SO + TEAM_BASERUN_SB + TEAM_BASERUN_CS + TEAM_BATTING_HBP + TEAM_PITCHING_H + TEAM_PITCHING_HR + TEAM_PITCHING_BB + TEAM_PITCHING_SO + TEAM_FIELDING_E + TEAM_FIELDING_DP, data=trainData)
+
+#view summary of best model
+summary(best)
+```
+
+```{r}
+ggplot(df, aes(x=hours, y=score)) + 
+          geom_point() +
+          stat_smooth(method='lm', formula = y ~ poly(x,2), size = 1) + 
+          xlab('Hours Studied') +
+          ylab('Score')
+```
+
+
+```{r}
+#randomly shuffle data
+train.shuffled <- new_train[sample(nrow(new_train)),]
+
+#define number of folds to use for k-fold cross-validation
+K <- 10 
+
+#define degree of polynomials to fit
+degree <- 5
+
+#create k equal-sized folds
+folds <- cut(seq(1,nrow(train.shuffled)),breaks=K,labels=FALSE)
+
+#create object to hold MSE's of models
+mse = matrix(data=NA,nrow=K,ncol=degree)
+
+#Perform K-fold cross validation
+for(i in 1:K){
+    
+    #define training and testing data
+    testIndexes <- which(folds==i,arr.ind=TRUE)
+    testData <- train.shuffled[testIndexes, ]
+    trainData <- train.shuffled[-testIndexes, ]
+    
+    #use k-fold cv to evaluate models
+    for (j in 1:degree){
+        fit.train = lm(TARGET_WINS ~ poly(TEAM_BATTING_2B,j) + poly(TEAM_BASERUN_SB, j) + TEAM_BATTING_H:TEAM_FIELDING_DP, data=trainData)
+        fit.test = predict(fit.train, newdata=testData)
+        mse[i,j] = mean((fit.test-testData$TARGET_WINS)^2) 
+    }
+}
+
+#find MSE for each degree 
+colMeans(mse)
+```
+```{r}
+#fit best model
+best = lm(TARGET_WINS ~ TEAM_BATTING_H + poly(TEAM_BATTING_2B,5, raw=T) + poly(TEAM_BASERUN_SB,5,raw=T) + TEAM_BATTING_H:TEAM_FIELDING_DP, data=trainData)
+
+#view summary of best model
+summary(best)
+```
+
+
+
+**General Linear Model**
+```{r}
+glm1 <- glm(TARGET_WINS ~ ., data = new_train)
+glm1
+```
+
+```{r}
+summary(glm1)
+```
+
+```{r}
+predict_glm1 <- predict(glm1, new_eval, type = "response")
+
+table_mat <- table(new_eval$WINS, predict >0.5)
+table_mat
+```
+
 
 
 **Least Squares**
@@ -520,6 +696,60 @@ summary(rlm1)
 
 
 
+
+**Multivariate Adaptive Regression Splines**
+
+https://www.statology.org/multivariate-adaptive-regression-splines-in-r/
+
+```{r}
+library(earth)     #fitting MARS models
+library(caret)     #tuning model parameters
+```
+
+
+```{r}
+#create a tuning grid
+hyper_grid <- expand.grid(degree = 1:3,
+                          nprune = seq(2, 50, length.out = 10) %>%
+                          floor())
+
+#make this example reproducible
+set.seed(1)
+
+#fit MARS model using k-fold cross-validation
+cv_mars <- train(
+  x = subset(new_train, select = -c(TARGET_WINS)),
+  y = new_train$TARGET_WINS,
+  method = "earth",
+  metric = "RMSE",
+  trControl = trainControl(method = "cv", number = 10),
+  tuneGrid = hyper_grid)
+
+#display model with lowest test RMSE
+cv_mars$results %>%
+  filter(nprune==cv_mars$bestTune$nprune, degree==cv_mars$bestTune$degree)    
+```
+
+
+```{r}
+#display test RMSE by terms and degree
+ggplot(cv_mars)
+```
+
+
+
+
+**Principal Components Regression**
+https://www.statology.org/principal-components-regression-in-r/
+
+
+
+
+**Partial Least Squares**
+https://www.statology.org/partial-least-squares-in-r/
+
+
+
 ```{r}
 # Predicting the Test set results
 y_pred = predict(rlm1, newdata = new_eval)
@@ -530,7 +760,7 @@ y_pred
 ```
 
 
-
+https://www.statology.org/multivariate-adaptive-regression-splines-in-r/
 
 
 ## SELECT MODELS
@@ -559,6 +789,8 @@ sqrt(mean((data$actual - data$predicted)^2))
 ```
 
 
+**Predictions**
+https://www.kaggle.com/code/pranjalpandey12/simple-to-multiple-and-polynomial-regression-in-r
 
 # Appendix: All code for this report (https://bookdown.org/yihui/rmarkdown-cookbook/code-appendix.html)
 
