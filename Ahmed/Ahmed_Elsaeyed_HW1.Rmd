@@ -1,0 +1,67 @@
+---
+title: "Homework1"
+author: "Ahmed Elsaeyed"
+date: "5/1/2022"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+    fig_caption: true
+    css: ae_theme.css
+    theme: cosmo
+---
+
+```{r setup, knitr::all_labels(), echo=TRUE, results='hide', warning=FALSE, message=FALSE }
+knitr::opts_chunk$set(echo = TRUE, class.source = "codechunk")
+
+library(RCurl)
+library(tidyr)
+library(dplyr) 
+library(RCurl)
+library(ggplot2)
+library(reshape2)
+```
+
+```{r data prep}
+my_git_url <- getURL("https://raw.githubusercontent.com/peterphung2043/data_621_hw_1/main/data/clean_train.csv")
+baseball_games<- read.csv(text = my_git_url)
+
+```
+
+# Data Exploration
+
+Upon first glance, the data contains 17 columns. The index column will be ignored for analysis purposes, and so that leaves the other 16. TARGET_WINS is the variable we want to investigate with regards to how well it is correlated with the other columns. To give some context, every row represents a baseball team and its performance during a particular season. TARGET_WINS is the number of wins, and each column after that represents a particular metric for the season. For example, TEAM_BATTING_H represents how many base hits by batters occurred for that team during the season. TEAM_PITCHING_E represents how many times an opposing team made a pitching mistake during the season. 
+```{r}
+summary(baseball_games)
+```
+As can be seen above, some of the columns have missing values. Contextually, this can be possible because not every metric must have a value- for example it is possible that an entire season can be played without a batter being hit by the pitch. However it is less likely that an entire season can be played without any strikeouts by batters. We did some research and came up with ways to address each of these issues- more on that later. 
+
+Another question we had was one of outliers- some of the values were way too high to be realistic of a season of baseball - such as one team having over 20,000 strikeouts. There will be further discussion regarding how we dealt with that as well. 
+
+```{r scatter per variable}
+bb_games_melted <- melt(baseball_games, "target")
+ggplot(data = bb_games_melted, aes(value, target)) +
+  geom_point() +
+  facet_wrap(.~variable, scales = "free") +
+  geom_smooth(method = "lm")
+
+```
+
+In the chart above we can see that some of these variables correlate as we would expect with the number of wins - such as TEAM_BATTING correlating positively with wins. However some of them did not make sense- like TEAM_PITCHING_SO having a negative correlation with wins. We made this chart to get a general idea of how each variable related to the number of wins. 
+
+KRUTIKAS PORTION: 
+In this portion our goal was to find, programmatically, which permutation of variables resulted in the best model. We used a library called olsrr along with GGally to achieve this, and we found that the list of variables that gave us a model with the highest R-squared (AFTER handling missing values and outliers) was: 
+
+
+We then decided to try out a few models of our own. 
+```{r my proposed model}
+
+model <- lm(target ~ bat_h + bat_2b + bat_3b + bat_so + bas_sb + p_h + f_e, data = baseball_games)
+
+summary(model)
+```
+
+With the cleaned data I get an R-squared value of 0.1883.
+
+
+

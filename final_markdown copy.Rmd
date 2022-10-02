@@ -1,0 +1,696 @@
+---
+title: "DATA 621 - Homework 1"
+output:
+  html_document: default
+  word_document: default
+date: '2022-09-10'
+---
+
+```{r  setup, knitr::all_labels(), echo=FALSE, results='hide', warning=FALSE, message=FALSE }
+knitr::opts_chunk$set(echo = TRUE, class.source = "codechunk")
+
+library(RCurl)
+library(tidyr)
+library(dplyr) 
+library(RCurl)
+library(ggplot2)
+library(reshape2)
+library(corrplot)
+library(mice)
+library(car)
+library(reshape)
+library(mixtools)
+library(tidyverse)
+library(GGally)
+library(MASS)
+suppressPackageStartupMessages(library("visdat"))
+```
+
+# Problem Statement and Goals
+
+Our objective is to make a linear regression model that can predict how many wins a baseball team will have in a season based on certain metrics. The variables we have been provided theoretically have positive or negative effects on the total number of wins. We will be exploring this in depth in our research to figure out which variables are correlated the most strongly with the wins, as well as finding out if some of the variables can be consolidated using known conventional baseball-stats algorithms like SABER.
+
+# Importing the datasets
+```{r echo = FALSE}
+#import dataset: moneyball-training-data
+train<- read.csv("https://raw.githubusercontent.com/AhmedBuckets/SPS621/main/moneyball-training-data.csv")
+
+#import dataset: moneyball-evaluation-data
+eval <- read.csv("https://raw.githubusercontent.com/AhmedBuckets/SPS621/main/moneyball-evaluation-data.csv")
+```
+
+# Data Exploration
+
+### Viewing Data
+
+Upon first glance, the data contains 17 columns. The index column will be ignored for analysis purposes, and so that leaves the other 16. TARGET_WINS is the variable we want to investigate with regards to how well it is correlated with the other columns. To give some context, every row represents a baseball team and its performance during a particular season. TARGET_WINS is the number of wins, and each column after that represents a particular metric for the season. For example, TEAM_BATTING_H represents how many base hits by batters occurred for that team during the season. TEAM_PITCHING_E represents how many times an opposing team made a pitching mistake during the season. In general, there are four categories of feature types:
+
+- Batting
+- Baserunning
+- Pitching
+- Fielding
+
+```{r echo = FALSE}
+train <- subset(train, select = -INDEX)
+eval <- subset(eval, select = -INDEX)
+summary(train)
+```
+
+
+From the above summary, we can see that that target variable is roughly normally distributed, with a mean of total wins around 80 games. This makes intuitive sense, as a standard season is 162 games, we would expect that the average number of wins would be roughly half of this value. 
+
+There are a few columns which appear to have outliers, particularly TEAM_PITCHING_H, and we will investigate those in depth throughout our data exploration and data preparation steps.
+
+
+### NA exploration
+
+As can be seen below, some of the columns have missing values. Contextually, this can be possible because not every metric must have a value- for example it is possible that an entire season can be played without a batter being hit by the pitch. However it is less likely that an entire season can be played without any strikeouts by batters. We did some research and came up with ways to address each of these issues- more on that later. 
+
+```{r echo = FALSE}
+train  %>%
+  summarise_all(list(~is.na(.)))%>%
+  pivot_longer(everything(),
+               names_to = "variables", values_to="missing") %>%
+  count(variables, missing) %>%
+  ggplot(aes(y=variables,x=n,fill=missing))+
+  geom_col()+
+  scale_fill_manual(values=c("skyblue3","gold"))+
+  theme(axis.title.y=element_blank()) + theme_classic()
+
+```
+
+<@Peter talk about the 6 columsn that are missing values. Allude to what we will do later in section 2.
+
+Talk about how we COULD use medians or means... but why that's bad... MICE>
+
+### Outliers
+
+Another question we had was one of outliers- some of the values were way too high to be realistic of a season of baseball - such as one team having over 20,000 strikeouts. 
+
+Below we can see very quickly that some variables have extreme outliers. 
+
+```{r echo = FALSE}
+ggplot(stack(train), aes(x = ind, y = values)) +
+  geom_boxplot() + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+From the chart above, we can see that the most problematic features include TEAM_PITCHING_H, TEAM_PITCHING_BB, and TEAM_PITCHING_SO. Where available we will employ cutoffs based on third party reference data such as baseball-almanac.com. If there is no available data, we will use other logical imputation methods to replace the outliers with reasonable values more fit to the data.
+
+### Data Skew
+
+It's important to understand the distributions of each feature. Optimally, we would want to see normal distributions in order to create an effective regression model.
+
+Creating a histogram for each of our columns, and using the `facet_wrap function` to separate each column in its own plotting panel:
+
+
+```{r echo = FALSE}
+train %>%
+  keep(is.numeric) %>% 
+  gather() %>% 
+  ggplot(aes(value)) +
+    facet_wrap(~ key, scales = "free") +
+    geom_histogram()
+```
+We can see that some of the variables are skewed to the right or the left like TEAM_PITCHING_SO. Some of them even have more than one spike (bi-modal) like TEAM_PITCHING_H. We will also handle these individually in the data_preparation portion. 
+
+While some columns exhibit these abnormalities, it is worth noting that the majority of features will not need to be addressed with transformations. As mentioned before, our target feature is very well normally distributed.
+
+### Initial Correlation 
+
+This is an initial exploration of how the variables correlate with wins. In the chart below we can see that some of these variables correlate as we would expect with the number of wins - such as TEAM_BATTING correlating positively with wins. However some of them did not make sense- like TEAM_PITCHING_SO having a negative correlation with wins. We made this chart to get a general idea of how each variable related to the number of wins.  
+
+In this initial exploration it is clear that the outliers in some of the variables are affecting the lines of best fit. When we handle them properly, as well as impute the missing data, these lines will likely change. 
+
+```{r echo = FALSE}
+bb_games_melted <- melt(train, "TARGET_WINS")
+ggplot(data = bb_games_melted, aes(value, TARGET_WINS)) +
+  geom_point() +
+  facet_wrap(.~variable, scales = "free") +
+  geom_smooth(method = "lm")
+
+```
+
+### Examining Feature Multicollinearity
+
+Finally, it is imperitive to understand which features are correlated with eachother in order to address and avoid multicollinearity within our models. By using a correlation plot, we can visualize the relationships between certain features.
+
+
+```{r}
+corrplot(cor(train, use = "na.or.complete"), method = 'number', type = 'lower', diag = FALSE, number.cex = 0.5, tl.cex = 0.5)
+```
+
+From the above correlation plot, we notice that there are a few features which exhibit very strong positive correlation. In patricular:
+
+- TEAM_PITCHING_H & TEAM_BATTIING_H == 1.0 correlation
+- TEAM_PITCHING_HR & TEAM_BATTING_HR == 1.0 correlation
+- TEAM_PITCHING_BB & TEAM_BATTING_BB == 1.0 correlation
+- TEAM_PITCHING_SO & TEAM_BATTING_SO == 1.0 correlation
+
+However, we must consider that these initial correlation values could be influenced by the fact that missing values and outliers have yet to be addressed. In later sections we will revisit this chart to determine final correlation values prior to model development.
+
+# Data Preperation
+
+### Renaming Column Names
+
+Keeping column names short and readable is important in order to practice ["table hygiene"](https://dataindependent.com/pandas/pandas-change-column-names-3-methods/).
+Therefore, new column names were generated and are shown on Table XX.
+
+```{r table1, echo=FALSE, message=FALSE, warnings=FALSE, results='asis'}
+tabl <- "
+| Original Column Name|New Column Name|
+|---------------|-------------:|
+|TARGET_WINS|target|
+|TEAM_BATTING_H|bat_h|
+|TEAM_BATTING_2B|bat_2b|
+|TEAM_BATTING_3B|bat_3b|
+|TEAM_BATTING_HR|bat_hr|
+|TEAM_BATTING_BB|bat_bb|
+|TEAM_BATTING_HBP|bat_hbp|
+|TEAM_BATTING_SO|bat_so|
+|TEAM_BASERUN_CS|bas_cs|
+|TEAM_FIELDING_E|f_e|
+|TEAM_FIELDING_DP|f_dp|
+|TEAM_PITCHING_BB|p_bb|
+|TEAM_PITCHING_H|p_h|
+|TEAM_PITCHING_HR|p_hr|
+|TEAM_PITCHING_SO|p_so|
+"
+cat(tabl) # output the table in a format good for HTML/PDF/docx conversion
+```
+
+```{r New column names for training data, echo = FALSE}
+
+# run this for training data
+
+new_cols <- c("target", "bat_h", "bat_2b", "bat_3b", "bat_hr", "bat_bb", "bat_so", "bas_sb", "bas_cs", "bat_hbp", "p_h", "p_hr", "p_bb", "p_so", "f_e", "f_dp"
+)
+
+colnames(train) <- new_cols
+```
+
+```{r New column names for evaluation data, echo = FALSE}
+
+# run this for evaluation data
+
+new_cols <- c("bat_h", "bat_2b", "bat_3b", "bat_hr", "bat_bb", "bat_so", "bas_sb", "bas_cs", "bat_hbp", "p_h", "p_hr", "p_bb", "p_so", "f_e", "f_dp"
+)
+
+colnames(eval) <- new_cols
+```
+
+
+### Dealing with Missing Values
+
+As shown in section 1, there are 6 features that have missing values:
+
+- Strikeouts by batters (5%): Should use median or regression model for imputation
+
+- Stolen bases (6%): Stolen bases weren’t tracked officially until 1887, which means some of the missing data could be from 1871-1886. These values could be imputed.
+
+- Caught stealing (34%): Stolen bases weren’t tracked officially until 1887, so some of the missing data could be from 1871-1886. These values could be imputed.
+
+- Batter hit by pitch (92%): This predictor will be removed from the analysis as too many of its values are missing.
+
+- Strikeouts by pitchers (4%): Should use median or regression model for imputation
+
+- Double plays (12%): Should use median or regression model for imputation
+
+
+[Tabachnick and Fidell ](https://imaging.mrc-cbu.cam.ac.uk/statswiki/FAQ/missing)
+
+In general, imputations by the means/medians is acceptable if the missing values only account for 5% of the sample. Peng et al.(2006) However, should the degree of missing values exceed 20% then using these simple imputation approaches will result in an artificial reduction in variability due to the fact that values are being imputed at the center of the variable's distribution.
+
+Our team decided to employ another technique to handle the missing values: Multiple Regression Imputation using the MICE package.
+
+The MICE package in R implements a methodology where each incomplete variable is imputed by a separate model. [Alice](https://datascienceplus.com/imputing-missing-data-with-r-mice-package/) points out that plausible values are drawn from a distribution specifically designed for each missing datapoint. Many imputation methods can be used within the package. The one that was selected for the data being analyzed in this report is PMM (Predictive Mean Matching), which is used for quantitative data. 
+
+[Van Buuren](https://stefvanbuuren.name/fimd/sec-pmm.html) explains that PMM works by selecting values from the observed/already existing data that would most likely belong to the variable in the observation with the missing value. The advantage of this is that it selects values that must exist from the observed data, so no negative values will be used to impute missing data.Not only that, it circumvents the shrinking of errors by using multiple regression models. The variability between the different imputed values gives a wider, but more correct standard error. Uncertainty is inherent in imputation which is why having multiple imputed values is important. Not only that. [Marshall et al. 2010](https://stefvanbuuren.name/fimd/sec-pmm.html) points out that:
+
+"Another simulation study that addressed skewed data concluded that predictive mean matching 'may be the preferred approach provided that less than 50% of the cases have missing data...'
+
+
+
+```{r Using MICE, echo = FALSE}
+# Removal of bat_hbp
+train <- subset(train, select = -c(bat_hbp))
+eval <- subset(eval, select = -c(bat_hbp))
+```
+
+```{r Imputing the missing data from MICE, include = FALSE}
+temp_data <- mice(train,m=4,maxit=5,meth='midastouch',seed=500)
+temp_eval_data <- mice(eval,m=3,maxit=5,meth='pmm',seed=500)
+```
+
+```{r, echo = FALSE}
+complete_data <- complete(temp_data,1)
+complete_eval_data <- complete(temp_eval_data,1)
+```
+
+```{r}
+densityplot(temp_data)
+```
+
+Following use of the MICE package, we can visualize the distributions of the imputed versus existing data points. The density of the imputed data for each imputed dataset is shown in magenta. The density of the observed data is shown in blue.
+
+### Analysis of Outliers
+
+Several predictors contained outliers that contradicted with existing baseball statistics or fell out of an "acceptable" range given the feature's inherent distribution. These features are:
+
+- bat_h: The most hits by team in a season is 1783. Therefore, any values above 1,783 were replaced with the median for the predictor [(Source)](https://www.baseball-almanac.com/recbooks/hits_records_mlb_teams.shtml).
+
+```{r, echo = FALSE}
+replace_median <- median(complete_data$bat_h[complete_data$bat_h <= 1783])
+
+complete_data$bat_h[complete_data$bat_h > 1783] <- replace_median
+
+complete_eval_data$bat_h[complete_eval_data$bat_h > 1783] <- replace_median
+```
+
+
+- p_h: We could not find any suitable statistics from outside sources for this feature. However, we can apply interquartile outlier analysis. By analyzing a given feature, those datapoints which fall above or below an "acceptable" range can be identified given the features inherent distribution.
+
+
+```{r, echo = FALSE}
+Q1 <- quantile(complete_data$p_h, probs=.25)
+Q3 <- quantile(complete_data$p_h, probs=.75)
+iqr = Q3-Q1
+upper_limit = Q3 + (iqr*1.5)
+lower_limit = Q1 - (iqr*1.5)
+replace_median <- median(complete_data$p_h[(complete_data$p_h < upper_limit) | (complete_data$p_h > lower_limit)])
+
+complete_data$p_h[(complete_data$p_h > upper_limit) | (complete_data$p_h < lower_limit)] <- replace_median
+
+complete_eval_data$p_h[(complete_eval_data$p_h > upper_limit) | (complete_eval_data$p_h < lower_limit)] <- replace_median
+
+```
+
+
+- p_so: The record for most strikeouts in a season is 1595. Anything above this should be removed or imputed [(Source)](https://www.baseball-almanac.com/recbooks/rb_strike2.shtml).
+
+```{r, echo = FALSE}
+replace_median <- median(complete_data$p_so[complete_data$p_so <= 1595])
+
+complete_data$p_so[complete_data$p_so > 1595] <- replace_median
+
+complete_eval_data$p_so[complete_eval_data$p_so > 1595] <- replace_median
+```
+
+
+- f_e: The record for most errors in a season is 886. Anything above this should be removed or imputed [(Source)](https://www.baseball-fever.com/forum/general-baseball/statistics-analysis-sabermetrics/2403-team-errors-in-a-season). 
+
+```{r, echo = FALSE}
+replace_median <- median(complete_data$f_e[complete_data$f_e <= 886])
+
+complete_data$f_e[complete_data$f_e > 886] <- replace_median
+
+complete_eval_data$f_e[complete_eval_data$f_e > 886] <- replace_median
+```
+
+
+- p_bb: We could not find any suitable statistics from outside sources for this feature. However, we can apply interquartile outlier analysis. By analyzing a given feature, those datapoints which fall above or below an "acceptable" range can be identified given the features inherent distribution.
+
+```{r, echo = FALSE}
+Q1 <- quantile(complete_data$p_bb, probs=.25)
+Q3 <- quantile(complete_data$p_bb, probs=.75)
+iqr = Q3-Q1
+upper_limit = Q3 + (iqr*1.5)
+lower_limit = Q1 - (iqr*1.5)
+replace_median <- median(complete_data$p_bb[(complete_data$p_bb < upper_limit) | (complete_data$p_bb > lower_limit)])
+
+complete_data$p_bb[(complete_data$p_bb > upper_limit) | (complete_data$p_bb < lower_limit)] <- replace_median
+
+complete_eval_data$p_bb[(complete_eval_data$p_bb > upper_limit) | (complete_eval_data$p_bb < lower_limit)] <- replace_median
+
+```
+
+After replacing the above outliers, we can visualize the improved distributions by use of a boxplot.
+
+```{r echo = FALSE}
+ggplot(stack(complete_data), aes(x = ind, y = values, fill=ind)) +
+  geom_boxplot() + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+
+While there are still outliers present in the dataset, particularly for bas_sb and f_e, we can see a large improvement from before. All features are wihin the range 0-2500. We can attempt to further deal with outliers should the need arise, but for now we will accept this distribution.
+
+### Box-Cox Transformation for skewed variables
+
+Based on the previous distribution plot (using histograms) we noticed that a select group of columns exhibited non-normal skew. In particular, the following columns showed signs of left-skew:
+- bat_3b
+- bas_sb
+- bas_cs
+- f_e
+- p_bb
+- p_h
+
+```{r echo = FALSE}
+train %>%
+  select(c(bat_3b, bas_sb, bas_cs, f_e, p_bb, p_h)) %>%
+  keep(is.numeric) %>% 
+  gather() %>% 
+  ggplot(aes(value)) +
+    facet_wrap(~ key, scales = "free") +
+    geom_histogram()
+```
+
+In order to address this skewness and attempt to normalize these features for future modeling, we will employ box-cox transformations. Because some of these values include 0, we will need to replace any zero values with infintesimmaly small, non-zero values.
+
+```{r}
+complete_data[complete_data == 0] <- 1e-6
+
+complete_eval_data[complete_eval_data == 0] <- 1e-6
+```
+
+After we use `powerTransform` to do the Box-Cox transformation, we than delete the original columns from `complete_data` using the `select` function from dplyr. Than use the `cbind` function to append the `transformed_data` to the `complete_data`. 
+
+
+```{r}
+
+skewed_vars <- "bat_3b, bas_sb, bas_cs, f_e, p_bb, p_h"
+
+lambdas <- powerTransform(eval(parse(text = paste("cbind(",skewed_vars,")", "~ 1"))), complete_data)
+
+transformed_data <- bcPower(lambdas$y, coef(lambdas))
+
+new_cols <- c("bat_3b", "bas_sb", "bas_cs", "f_e", "p_bb", "p_h")
+
+colnames(transformed_data) <- new_cols
+
+complete_data <- cbind(subset(complete_data, select = eval(parse(text = paste("-c(", skewed_vars, ")")))),
+                       transformed_data)
+
+```
+
+
+
+```{r}
+
+lambdas <- powerTransform(eval(parse(text = paste("cbind(",skewed_vars,")", "~ 1"))), complete_eval_data)
+
+transformed_data <- bcPower(lambdas$y, coef(lambdas))
+
+colnames(transformed_data) <- new_cols
+
+complete_eval_data <- cbind(subset(complete_eval_data, select = eval(parse(text = paste("-c(", skewed_vars, ")")))),transformed_data)
+```
+
+
+```{r echo = FALSE}
+complete_data %>%
+  keep(is.numeric) %>% 
+  gather() %>% 
+  ggplot(aes(value)) +
+    facet_wrap(~ key, scales = "free") +
+    geom_histogram()
+```
+
+
+```{r echo = FALSE}
+complete_data %>%
+  select(c(bat_3b, bas_sb, bas_cs, f_e, p_bb, p_h)) %>%
+  keep(is.numeric) %>% 
+  gather() %>% 
+  ggplot(aes(value)) +
+    facet_wrap(~ key, scales = "free") +
+    geom_histogram()
+```
+As we can see from the above, the boxcox transformations on the selected features performed extremely well. We can see that all features included now exhibit normal or near-normal distributions around their respective centers.
+
+### Dealing with Bimodal Variables
+
+Bimodal distributions in data are interesting, in that they represent features which actually contain multiple (2) inherent systems resulting in separated distributional peaks. Our approach to solving this is to create dummy variables representing which side of the local minimum each datapoint falls with respect to it's original bimodal distribution.
+
+```{r}
+# Finds where two histograms intersect
+histogram_intersection <- function(mu_1, mu_2, sigma_1, sigma_2){
+  if (sigma_1 == sigma_2) stop('Both Sigmas are the same. Get 1/0')
+  (mu_2*(sigma_1^2) - sigma_2*(mu_1*sigma_2 + sigma_1*sqrt((mu_1 - mu_2)^2 + 2*(sigma_1^2 -      sigma_2^2)*log(sigma_1/sigma_2))))/(sigma_1^2 - sigma_2^2)
+}
+
+# Fits two histograms to df[,bimodal_var] where `bimodal_var` is a bimodal
+# variable. Than finds the point where the two histograms intersects. This
+# value is returned as `cutoff`
+create_bimodal_cutoff <- function(bimodal_var, df){
+  bimodal_var_data <-  df[,bimodal_var]
+  mixmdl = normalmixEM(bimodal_var_data)
+  
+  mu_1 = mixmdl$mu[1]
+  mu_2 = mixmdl$mu[2]
+  
+  sigma_1 = mixmdl$sigma[1]
+  sigma_2 = mixmdl$sigma[2]
+  
+  cutoff <- histogram_intersection(mu_1, mu_2, sigma_1, sigma_2)
+  
+  plot(mixmdl,which=2)
+  lines(density(bimodal_var_data), lty=2, lwd=2)
+  abline(v = cutoff)
+  return(cutoff)
+}
+
+# Creates a dummy variable where any values for df[,bimodal_var] below `cutoff`
+# are given a 1, and any values above are given a 0. Since these are dummy
+# variables, they are converted from `numeric` to `factor`s using the `factor`
+# function.
+append_bimodal_dummy_var <- function(cutoff, bimodal_var, df){
+  df[,paste("bi", bimodal_var, sep = "_")] <- factor((df[,bimodal_var] < cutoff) * 1)
+  return(df)
+}
+
+# Creates dummy variables based on bimodal data. 
+create_bimodal_dummy_var <- function(bimodal_var, df){
+  cutoff <- create_bimodal_cutoff(bimodal_var, df)
+  df <- append_bimodal_dummy_var(cutoff, bimodal_var, df)
+  return(df)
+}
+
+```
+
+```{r}
+for (bimodal_var in c("bat_so", "p_hr", "bat_hr")){
+  complete_data <- create_bimodal_dummy_var(bimodal_var, complete_data)
+}
+```
+
+```{r}
+for (bimodal_var in c("bat_so", "p_hr", "bat_hr")){
+  complete_eval_data <- create_bimodal_dummy_var(bimodal_var, complete_eval_data)
+}
+```
+
+
+### Add SABER analysis
+
+Saber Model
+
+Finally, we would like to employ outside analysis in order to engineer new, potentially powerful features. Popularized in the movie "Moneyball", the SABERMETRICS model for baseball analysis includes a feature known as BsR (base runs). This statistic estimates the amount of runs a team should score. 
+
+(see http://tangotiger.net/wiki_archive/Base_Runs.html for more information). The formula for constructing this metric is as follows:
+
+BSR = A*B/(B+A)+C where:
+
+A = TEAM_BATTING_1B + TEAM_BATTING_2B + TEAM_BATTING_3B + TEAM_BATTING_BB
+
+B = 1.02(1.4TEAM_TOTAL_BASES -0.6TEAM_BATTING_H + 0.1TEAM_BATTING_BB)
+
+C = TEAM_BATTING_HR
+
+
+```{r}
+complete_data$bat_1b <- complete_data$bat_h - complete_data$bat_2b - complete_data$bat_3b - complete_data$bat_hr
+complete_data$total_bases <- complete_data$bat_1b + 2*complete_data$bat_2b + 3*complete_data$bat_3b + 4*complete_data$bat_hr
+
+
+A <- complete_data$bat_h
+B <- 1.02*(1.4*complete_data$total_bases -0.6*complete_data$bat_h + 0.1*complete_data$bat_bb)
+C <- complete_data$bat_hr
+
+complete_data$saber <- A*B/(B+A)+C
+```
+
+```{r}
+complete_eval_data$bat_1b <- complete_eval_data$bat_h - complete_eval_data$bat_2b - complete_eval_data$bat_3b - complete_eval_data$bat_hr
+
+complete_eval_data$total_bases <- complete_eval_data$bat_1b + 2*complete_eval_data$bat_2b + 3*complete_eval_data$bat_3b + 4*complete_eval_data$bat_hr
+
+
+A <- complete_eval_data$bat_h
+B <- 1.02*(1.4*complete_eval_data$total_bases -0.6*complete_eval_data$bat_h + 0.1*complete_eval_data$bat_bb)
+C <- complete_eval_data$bat_hr
+
+complete_eval_data$saber <- A*B/(B+A)+C
+```
+
+### Reviewing the correlations
+
+After performing multiple cleaning and imputation steps, we would like to visualize again the correlations between features and their target, as well as between features themselves.
+
+```{r echo = FALSE}
+cor_numeric <- complete_data %>%
+  keep(is.numeric)
+
+
+corrplot(cor(cor_numeric), method = 'number', type = 'lower', diag = FALSE, number.cex = 0.5, tl.cex = 0.5)
+```
+
+These correlation values make much more sense than before. We can see that features no longer have 1.0 correlations, which in general are highly unlikely to occur naturally. The new most correlated (and least correlated) features are as follows:
+
+- p_hr & bat_hr (0.97): This is an interested correlation, as we would not have intitially expected the amount of homeruns allowed to be correlated with the number of homeruns achieved from a team. However, one could make the argument that a team which focuses on offense would similarly be lacking in defense.
+
+- bat_1b & bat_so (-0.73): These features are negatively correlated, which makes intuititve sense. If a team has many players making it to base, then conversely we would expect that this team would have less strikeouts at bat.
+
+- bat_so & p_so (0.87): These features intuitively should not have such high correlation. Similar to above, we would not expect the performance of batter strikeouts to have any relationship to the performance of pitching strikouts on the same team.
+
+```{r echo = FALSE}
+cor_numeric <- complete_data %>%
+  keep(is.numeric)
+bb_games_melted <- melt(cor_numeric, "target")
+ggplot(data = bb_games_melted, aes(value, target)) +
+  geom_point() +
+  facet_wrap(.~variable, scales = "free") +
+  geom_smooth(method = "lm")
+
+```
+After applying all transformations and imputations, we can see that the feature correlation with the target variable has also improved. Features predicted to have positive correlations (as provided by the assignment guide) do tend to have positive correlations. Similarly, features with expected negative correlations behave as described. This provides us some level of validation as we take the next steps with model building.
+
+# Build Models
+
+```{r}
+#create data frame with 0 rows and 3 columns
+tracker <- data.frame(matrix(ncol = 2, nrow = 0))
+
+#provide column names
+colnames(tracker) <- c("Model", "Adjusted R-Squared")
+
+#create function to update the tracker
+update_tracker <- function(tracker, model_name, model){
+  model_sum <- summary(model)
+  r_squared <- model_sum$adj.r.squared
+  tracker[nrow(tracker) + 1,] = c(model_name, r_squared)
+  return(tracker)
+}
+```
+
+
+### Examine base model, no transformations, no engineering
+
+Our first model (Base model) will use all of the initially provided columns, after cleaning and imputation. We will use the results of this model to understand a baseline for our future model development.
+
+```{r}
+base <- complete_data %>% select("target", "bat_h", "bat_2b", "bat_hr", "bat_bb", "bat_so", "p_h", "p_hr", "p_bb", "p_so", "f_dp", "bat_3b", "bas_sb", "bas_cs", "f_e")
+```
+
+
+```{r}
+base_mdl <- lm(target~., data=base)
+tracker <- update_tracker(tracker, "Base Model", base_mdl)
+summary(base_mdl)
+```
+
+
+Based on the above output, we can see that this model performs relateively poorly against the training data. However, as this is our base model, we will assess the performance of all future models against this value. Moving forward, if we can lift the Adjusted r^2 to above 0.3, we will consider it a general improvement.
+
+
+### Evaluate SABER model
+
+The next model we would like to evaluate is the SABER model. Here we will use all original features, and additionally we will include the engineered SABER metrics. Hopefully we will see a lift in performance after utilizing these industry-derived features.
+
+```{r}
+mdl_inc_saber <- lm(target~., data=complete_data)
+tracker <- update_tracker(tracker, "Saber Model", mdl_inc_saber)
+summary(mdl_inc_saber)
+```
+
+As expected, we did see a lift in perfomance after including SABER metrics. However, the lift was hardly significant. We are still below 0.3 Adjusted R^2.
+
+## SABER reduced
+
+Here we will test out a more parsimonious version of the above SABER model. In the spirit of simplifying the model for human use and understanding, we will select only the features that have high significance from the above SABER model. Additionally, we will exlude any features which were included as part of the construction of SABER, in order to reduce inherent multicollinearity.
+
+```{r}
+sab_reduced <- complete_data %>% select("target", "saber", "bi_bat_hr", "f_e", "bas_sb", "f_dp", "bat_so", "bat_bb")
+
+sab_reduced_model <- lm(target~., data=sab_reduced)
+
+tracker <- update_tracker(tracker, "Saber Reduced", sab_reduced_model)
+
+summary(sab_reduced_model)
+```
+
+While the Adjusted R^2 has been slightly reduced to 0.26, we have also significantly reduced the complexity of the model. This provides value in itself, as the model can be more easily distributed to players and coaches.
+
+
+### Step AIC
+
+<make sure to connect base model to this>
+
+
+```{r}
+mdl_step.model <- stepAIC(base_mdl, direction = "both", trace = FALSE)
+
+tracker <- update_tracker(tracker, "Step AIC", mdl_step.model)
+
+summary(mdl_step.model)
+```
+
+<Add comments for this>
+
+### Square Root Step AIC
+
+```{r}
+mdl_sqrt = lm(sqrt(target) ~ .,data = complete_data)
+```
+
+```{r}
+mdl_sqrt_step.model <- stepAIC(mdl_sqrt, direction = "both", trace = FALSE)
+tracker <- update_tracker(tracker, "Step AIC Sqrt", mdl_sqrt_step.model)
+summary(mdl_sqrt_step.model)
+```
+
+<Add comments>
+
+### All models
+
+```{r eval=FALSE}
+mdl_all <- olsrr::ols_step_all_possible(mdl_inc_saber)
+```
+
+```{r Select top n models}
+
+top_n_models <- all_models %>%
+  arrange(desc(adjr)) %>%
+  slice(1:3)
+
+top_n_models$predictors[1]
+```
+
+<Add comments>
+
+
+# Model Selection
+
+### Review the tracker dataframe from training set
+
+<load the tracker dataframe>
+
+<write a little about which we chose and why>
+
+<high performance, low feature count, human understandability... whatever?>
+
+### Evaluate all of the models on the eval set
+
+<build an eval tracker>
+
+<we can make a barplot from the data tracker>
+
+### Select a model
+
+<based on the previous step, choose a model with high score and optimally less features>
+
+<look at the metrics for R^2, RSME - talk about how close we are compared to how it did on the training set>
+
+< make a regression plot>
+
+< a little talk about if it makes sense, what works, what doesn't, what other features might have been helpful if we had them... random stuff.>
+
+
