@@ -35,7 +35,7 @@ suppressPackageStartupMessages(library("pROC"))
 Loading `classification-output-data.csv` file from Github repositories.
 ```{r load-dataset}
 #df <- read.csv("url", encoding = "utf-8")
-df <- read.csv("classification-output-data.csv")
+data <- read.csv("classification-output-data.csv")
 ```
 
 
@@ -57,7 +57,7 @@ The raw confusion matrix is a simple table used to summarise the performance of 
 The confusion matrix for a binary classifier:
 ```{r raw_matrix}
 #matrix = confusion_matrix(true = actual_labels, pred = predicted_labels)
-raw_cm <- as.matrix(table(Actual = df$class, Predicted = df$scored.class)) #created the confusion matrix
+raw_cm <- as.matrix(table(Actual = data$class, Predicted = data$scored.class)) #created the confusion matrix
 raw_cm
 ```
 
@@ -93,17 +93,24 @@ The **accuracy** of the confusionMatrix is the proportion of correct classificat
 
 $$ Accuracy = \frac{TN + TP} {TN + FP + FN + TP} $$
 
-
+Here we calculate the accuracy manually using the above definition for accuracy, and below we create a function that takes a data frame and calculated the True Positive and True Negative values and outputs the accuracy. 
 ```{r accuracy_formula}
 Accuracy = (119+27) / (119+5+30+27)
+Accuracy
 ```
 
 ```{r accuracy_function}
-accuracy = sum(diag) / n
-#accuracy
+accuracy_predictions <- function(x){
+  TP <- sum(x$class == 1 & x$scored.class == 1)
+  TN <- sum(x$class == 0 & x$scored.class == 0)
+  round((TP + TN)/nrow(x), 4)
+}
+accuracy_score = accuracy_predictions(data)
+accuracy_score
+
 ```
 
-The accuracy score reads as ", `r round((accuracy*100), 2)`, "% for the given data and observations."
+The accuracy score reads as ", `r round((accuracy_prediction*100), 2)`, "% for the given data and observations."
 
 
 ### 4. Write a function that takes the data set as a dataframe, with actual and predicted classifications identified, and returns the classification error rate of the predictions. Verify that you get an accuracy and an error rate that sums to one.
@@ -112,24 +119,29 @@ The accuracy score reads as ", `r round((accuracy*100), 2)`, "% for the given da
 The **total classification error rate,** calculates the percentage of total incorrect classifications made by the model as follows:
 
 $$ Classification Error Rate = \frac{FP + FN} {TN + FP + FN + TP} $$
-
+Similarly we manually calculate the error rate as defined above and then again have a function to do this given any dataframe. 
 ```{r error_formula}
 Error_rate = (5+30)/(119+5+30+27)
-#Error_rate
+Error_rate
 ```
 
 ```{r error_function}
-error_rate = 1 - (sum(diag)/n)
-#error_rate
+error_predictions <- function(x){
+  FP <- sum(x$class == 0 & x$scored.class == 1)
+  FN <- sum(x$class == 1 & x$scored.class == 0)
+  round((FP + FN)/nrow(x), 4)
+}
+error_prediction = error_predictions(data)
+error_prediction
 ```
 
 
-The *total classification error* rate reads as ", `r round((Error_rate*100), 2)`, "% for the given data and observations.
+The *total classification error* rate reads as ", `r round((error_prediction*100), 2)`, "% for the given data and observations.
 
 In this case, the error rate is low and indicates that the model has a high success prediction rate on `TRUE POSITIVE` and `FALSE POSITIVE`.
 
 
-The summation on *accuracy score* and the *total classification error rate* is ", `r round(((Accuracy+Error_rate)*100), 2)`, "% or ", `r round(((Accuracy+Error_rate)), 2)`, " for the given data and observations.
+The summation on *accuracy score* and the *total classification error rate* is ", `r round(((accuracy_prediction+error_prediction)*100), 2)`, "% or ", `r round(((accuracy_prediction+error_prediction)), 2)`, " for the given data and observations.
 
 
 ### 5. Write a function that takes the data set as a dataframe, with actual and predicted classifications identified, and returns the precision of the predictions.
@@ -141,18 +153,26 @@ $$ Precision = \frac{TP} {FP + TP} $$
 
 ```{r precision_formula}
 Precision = 27/(5+27)
-#Precision
+Precision
 ```
 
 The metric of precision is important in cases when you want to minimise false positives and maximise true positives. The binary classifier will predict whether values are negative (0) or positive (1). In the task we will look at the values of the positive class (1) for the reporting metrics.
 ```{r precision_function}
 #The precision contains 2 values corresponding to the classes 0, and 1. 
 #In binary classification tasks, we will look at the values of the positive class (1) for reporting metrics.
-precision = diag / colsums
-#precision
+
+precision <- function(x){
+  TP <- sum(x$class == 1 & x$scored.class == 1)
+  FP <- sum(x$class == 0 & x$scored.class == 1)
+  
+  round(TP/(TP+FP), 4)
+}
+precision_score = precision(data)
+
+precision_score
 ```
 
-The positive class **precision** rate on correct predictions is ", `r round((precision*100), 2)`, "% for the given data and observations.
+The positive class **precision** rate on correct predictions is ", `r round((precision_score*100), 2)`, "% for the given data and observations.
 
 
 
@@ -172,12 +192,19 @@ In this task we will look at the values of the positive class (1) for the report
 ```{r recall_function}
 #The sensitivity/recall contains 2 values corresponding to the classes 0, and 1. 
 #In binary classification tasks, we will look at the values of the positive class (1) for reporting metrics.
-recall. = diag / rowsums
-recall.
+recall <- function(x){
+  TP <- sum(x$class == 1 & x$scored.class == 1)
+  FN <- sum(x$class == 1 & x$scored.class == 0)
+  
+  round(TP/(TP+FN), 4)
+}
+recall_score = recall(data)
+
+recall_score
 ```
 
 
-The positive class **sensitivity rate (recall)** of the predictions is able to correctly detect ", `r round((recall*100), 2)`, "% of all fraudulent cases in the given data and observations.
+The positive class **sensitivity rate (recall)** of the predictions is able to correctly detect ", `r round((recall_score*100), 2)`, "% of all fraudulent cases in the given data and observations.
 
 
 ### 7. Write a function that takes the data set as a dataframe, with actual and predicted classifications identified, and returns the specificity of the predictions.
@@ -194,12 +221,19 @@ specif
 In this task we will look at the values of the negative class (0) for the reporting metrics.
 
 ```{r specif_function}
-specif. = diag / rowsums
-specif.
+specif2 <- function(x){
+  TN <- sum(x$class == 0 & x$scored.class == 0)
+  FP <- sum(x$class == 0 & x$scored.class == 1)
+  
+  round(TN/(TN+FP), 4)
+}
+specif_score = specif2(data)
+
+specif_score
 ```
 
 
-The **specificity** rate of the predictions reads as ", `r round((specif*100), 2)`, "% for the given data and observations.
+The **specificity** rate of the predictions reads as ", `r round((specif_score*100), 2)`, "% for the given data and observations.
 
 
 
@@ -208,36 +242,31 @@ The **specificity** rate of the predictions reads as ", `r round((specif*100), 2
 F-score is a metric that combines both the precision and sensitivity (recall) into a single value:
 
 $$ F = \frac{2 * Precision * Sensitivity(Recall)} {Precision + Sensitivity(Recall)} $$
+F-score is a function of precision and sensitivity, which we have calculated previouisly as 0.84 and 0.47. Below we find the F-score manually and then write a function to do so given a data frame. 
+```{r fscore_manual}
+(2*0.84*0.47)/(0.84+0.47)
+```
 
 In this binary classification task, we will look at the values of the positive class (1) for reporting metrics.
 
 ```{r fscore_function}
-fscore = 2 * precision * recall. / (precision + recall.)
-fscore
+fscore <- function(x) {
+  precision_score = precision(x)
+  recall_score = recall(x)
+  (2* precision_score * recall_score)/(precision_score + recall_score)
+}
+
+fscore_score = fscore(data)
+fscore_score
 ```
 
 
-The positive class F1-score of the predictions reads as ", `r round(((fscore[2])*100), 2)`, "% for the given data and observations. An F1-score in the range of 0.5 - 0.8 is considered a good performance measure for a classification model to predict each observation correctly. 
+The positive class F1-score of the predictions reads as ", `r round(((fscore_score[2])*100), 2)`, "% for the given data and observations. An F1-score in the range of 0.5 - 0.8 is considered a good performance measure for a classification model to predict each observation correctly. 
 
 
 ### 9. Before we move on, let's consider a question that was asked: What are the bounds on the F1 score? Show that the F1 score will always be between 0 and 1. (Hint: If 0 < a < 1 and 0 < b < 1 then ab < a.)
- 
 
-**F1-score** represents the harmonic mean of the precision and recall. The bounds on the **F1-score** range from 0.47 to 0.84, with 1 representing a model that perfectly classifies each observation into the correct class and 0 representing a model that is unable to classify any observation in to the correct class. 
-
-In the `raw confusion matrix` model, we can show that the F-1 score is always between 0 and 1 as follows:
-
-$$ Precision = \frac{True Positive}  {True Positive + False Positive} = \frac{27} {27+5} = \frac{27}{32} = 0.84$$
-
-$$ Recall = \frac{True Positive}{True Positive + False Positive} = \frac{27}{27+30} = \frac{27}{57} = 0.47 $$
-
-Now, we will calculate the F1 Score for each threshold 0.01, 0.02, 0.03,…0.99. The threshold that gives the optimal cutoff (optimal F1 Score) is:
-```{r}
-f1Scores <- sapply(seq(0.01, 0.99, .01), function(thresh) F1_Score(df$class, ifelse(df$scored.class >= thresh, 1, 0), positive = 0))
-
-which.max(f1Scores) 
-```
-
+Based on the bounds for precision and sensitivity in the formula above (*0 < precision < 1* and *0 < sensitivity < 1*) we can see that the numerator and denominator both have bounds of 0-2. Therefore the fsocre itself will have bounds of 0 to 1. 
 
 
 ### 10. Write a function that generates an ROC curve from a data set with a true classification column (class in our example) and a probability column (scored.probability in our example). Your function should return a list that includes the plot of the ROC curve and a vector that contains the calculated area under the curve (AUC). Note that I recommend using a sequence of thresholds ranging from 0 to 1 at 0.01 intervals.
@@ -263,26 +292,20 @@ ROC <- function(x, y){
   legend("center", legend= c("AUC", round(area_under_curve, 4)))
   
 }
-ROC(df$class,df$scored.probability)
+ROC(data$class,data$scored.probability)
 ```
 
 
 ### 11. Use your **created R functions** and the provided classification output data set to produce all of the classification metrics discussed above.
  
 ```{r}
-data.frame(accuracy, precision, recall., specif., fscore)
+data.frame(accuracy_score, precision_score, recall_score, specif_score, fscore_score)
 ```
 
 
 ### 12. Investigate the **caret** package. In particular, consider the functions `confusionMatrix`, `sensitivity`, and `specificity`. Apply the functions to the data set. How do the results compare with your own functions?
-
-Convert data value and reference value to factors with the same levels.
-```{r factor_vectors}
-#create vectors having data points
-actual_value <- factor(df$class)
-predicted_value <- factor(df$scored.class)
-```
-
+It all matched up really well
+Why sensitivity recall same thing pls 
 
 ```{r confusion_matrix}
 set.seed(123)
@@ -294,9 +317,9 @@ cm
 
 ### 13. Investigate the **pROC** package. Use it to generate an ROC curve for the data set. How do the results compare with your own functions?
  
-
+Same AUC very nice
 ```{r message= FALSE, warning=FALSE}
-pROC_obj <- roc(df$class, df$scored.probability, smoothed = TRUE,
+pROC_obj <- roc(data$class, data$scored.probability, smoothed = TRUE,
                 # arguments for ci
                 ci = TRUE, ci.alpha = 0.9, stratified = FALSE,
                 # arguments for plot
