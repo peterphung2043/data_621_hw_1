@@ -274,9 +274,9 @@ specif_score
 
 In this task we will look at the values of the negative class (0) for the reporting metrics. With that being said, using the values from the confusion matrix:
 
-$$Specificity = \frac{119}{119 + 5} = `r round((specif_score), 4)`$$
+$$Specificity = \frac{119}{119 + 5} = `r round((specif_score), 2)`$$
 
-The **specificity** rate of the predictions reads as `r round((specif_score*100), 4)`% for the given data and observations.
+The **specificity** rate of the predictions reads as `r round((specif_score*100), 2)`% for the given data and observations.
 
 ### 8. Write a function that takes the data set as a dataframe, with actual and predicted classifications identified, and returns the F1 score of the predictions.
 
@@ -304,10 +304,10 @@ fscore_score
 ```
 F-score is a function of precision and sensitivity, which we have calculated previously as 0.84 and 0.47. In this binary classification task, we will look at the values of the positive class (1) for reporting metrics. With that being said, using the precision and recall values calculated earlier:
 
-$$F = \frac{2 \times 0.84 \times 0.47}{0.84 \times 0.47} = `r round(((fscore_score)), 4)`$$
+$$F = \frac{2 \times 0.84 \times 0.47}{0.84 \times 0.47} = `r round(((fscore_score)), 2)`$$
 
 
-The positive class F1-score of the predictions reads as `r round(((fscore_score)*100), 4)`% for the given data and observations. An F1-score in the range of 0.5 - 0.8 is considered a good performance measure for a classification model to predict each observation correctly. 
+The positive class F1-score of the predictions reads as `r round(((fscore_score)*100), 2)`% for the given data and observations. An F1-score in the range of 0.5 - 0.8 is considered a good performance measure for a classification model to predict each observation correctly. 
 
 ### 9. Before we move on, let's consider a question that was asked: What are the bounds on the F1 score? Show that the F1 score will always be between 0 and 1. (Hint: If 0 < a < 1 and 0 < b < 1 then ab < a.)
 
