@@ -751,6 +751,7 @@ The QQ plot shows that the data is centered in the middle, but there is signific
 
 
 #### Important Metrics for Step AIC Square Root Model
+
 Important metrics for the Step AIC Square Root model are:
 
 - R-squared: 0.3027
@@ -764,6 +765,9 @@ Important metrics for the Step AIC Square Root model are:
 
 The predictions were generated using the evaluation set on the Square Root Step AIC model. These predictions are provided in the `predictions.csv` file.
 
+# Appendix
+
+The R code that was used in the analyses shown in this report can be viewed here: 
 
 ```{r, echo = FALSE}
 predictions <- predict(mdl_sqrt_step.model, complete_eval_data) ** 2

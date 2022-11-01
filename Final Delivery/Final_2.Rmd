@@ -360,7 +360,7 @@ bimodal_vars <- c("bat_so", "p_hr", "bat_hr")
 
 par(mfrow = c(3, 1))
 for (bimodal_var in bimodal_vars) {
-  complete_data <- create_bimodal_dummy_var(bimodal_var = bimodal_var, df = complete_data)
+  complete_data <- create_bimodal_dummy_var(bimodal_var= bimodal_var, df = complete_data)
 }
 
 #The cutoffs for these variables were determined using the cutoff determined from the training data.
