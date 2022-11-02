@@ -1,0 +1,120 @@
+---
+title: "Homework 3"
+output:
+  pdf_document: default
+  html_document: default
+date: '2022-11-01'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(corrplot)
+```
+
+## Importing Data
+
+```{r}
+crime_eval <- read.csv("crime-evaluation-data_modified.csv")
+crime_training <- read.csv("crime-training-data_modified.csv")
+```
+
+## Problem Statement and Goals
+
+In this report, we generate a binary logistic regression model that is able to predict whether or not the crime rate for a neighborhood is above the median crime rate (1) or not (0). The independent and dependent variables that are used in order to generate this model use data from various neighborhoods of a major city. The analysis detailed in this report shows the testing of several models from which a best model was selected based on model performance and various metrics. 
+
+## Data Exploration
+
+The following is a summary of the variables provided within the data to generate the binary logistic regression model:
+
+- `zn`: proportion of residential land zoned for large lots (over 25000 square feet) (predictor variable)
+- `indus`: proportion of non-retail business acres per suburb (predictor variable)
+- `chas`: a dummy var. for whether the suburb borders the Charles River (1) or not (0) (predictor variable)
+- `nox`: nitrogen oxides concentration (parts per 10 million) (predictor variable)
+- `rm`: average number of rooms per dwelling (predictor variable)
+- `age`: proportion of owner-occupied units built prior to 1940 (predictor variable)
+- `dis`: weighted mean of distances to five Boston employment centers (predictor variable)
+- `rad`: index of accessibility to radial highways (predictor variable)
+- `tax`: full-value property-tax rate per $10,000 (predictor variable)
+- `ptratio`: pupil-teacher ratio by town (predictor variable)
+- `lstat`: lower status of the population (percent) (predictor variable)
+- `medv`: median value of owner-occupied homes in $1000s (predictor variable)
+- `target`: whether the crime rate is above the median crime rate (1) or not (0) (response variable)
+
+A summary of the variables is shown below. See that within the summary, there does not seem to be any extremely high or extremely low values relative to the medians and means for each of the continuous predictor variables. The single binary predictor variable `chas` has reasonable values as well.
+
+```{r, comment = NA}
+crime_training$chas <- factor(crime_training$chas)
+crime_training$target <- factor(crime_training$target)
+
+summary(crime_training)
+```
+
+
+Figure XX reveals that there are no missing values within the dataset. Therefore, no imputing is required for this dataset.
+
+```{r}
+crime_training  %>%
+  summarise_all(list(~is.na(.)))%>%
+  pivot_longer(everything(),
+               names_to = "variables", values_to="missing") %>%
+  count(variables, missing) %>%
+  ggplot(aes(y=variables,x=n,fill=missing))+
+  geom_col()+
+  scale_fill_manual(values=c("skyblue3","gold"))+
+  theme(axis.title.y=element_blank()) + theme_classic()
+```
+*Figure XX: Chart showing the count of missing values for each of the variables in the dataset. Note that since there are no missing values, the legend only shows one item.*
+
+### Outliers
+
+```{r echo = FALSE}
+par(mfrow = c(4, 3), mai = c(0.1, 0.6, 0.1, 0.1))
+
+for (col_name in colnames(crime_training %>% dplyr::select(-chas, -target))){
+  boxplot(crime_training[[col_name]],
+          ylab = col_name)
+}
+```
+*Figure XX: Box plots for each of the variables in the dataset.*
+
+Note that the boxplots shown in Figure xx show that `rad` and `tax` have significantly large interquartile ranges which indicates skewness. The density plots for these variables are provided in the "Transformations" section of this report.
+
+```{r}
+ggplot(crime_training, aes(x = ))
+```
+
+Figure XX shows boxplots for the continuous variables. While `zn`, `rm`, `dis`, `lstat` and `medv` contain outliers, the outliers in general do not seem to be any significant enough to affect the model greatly. Cook's distance can only be used after a regression model has been fit to the data. Therefore, outlier analysis was conducted after the models were generated to identify points that negatively affect the regression model.
+
+### Examining Feature Multicollinearity
+
+Finally, it is imperative to understand which features are correlated with each other in order to address and avoid multicollinearity within our models. By using a correlation plot, we can visualize the relationships between certain features. The correlation plot is only able to determine the correlation for continuous variables. There are methodologies to determine correlations for categorical variables (tetrachoric correlation). However there is only one binary predictor variable which is why the multicollinearity will only be considered for the continuous variables.
+
+
+```{r}
+corrplot(cor(subset(crime_training, select = -c(chas, target)), use = "na.or.complete"), 
+         method = 'number',
+         type = 'lower',
+         diag = FALSE,
+         number.cex = 0.5,
+         tl.cex = 0.5)
+```
+*Figure xx: Multicollinearity plot for continuous predictor variables*
+
+Figure XX reveals that `rad` and `tax` have an extremely high correlation of 0.91. What this indicates that there is a significant correlation between access to radial highways and property taxes. Property taxes 
+
+## Transformations for normality
+
+## Simple Model
+
+Fit all the independent variables here and fit the dependent variable as well.
+
+## Works Cited
+
+[1] What is Cook's Distance? (StatisticsHowTo): https://www.statisticshowto.com/cooks-distance/
+
+[2] How to Calculate Correlation Between Categorical Variables (Statology): https://www.statology.org/correlation-between-categorical-variables/
+
+[3] The 6 Assumptions of Logistic Regression (Statology): https://www.statology.org/assumptions-of-logistic-regression/
