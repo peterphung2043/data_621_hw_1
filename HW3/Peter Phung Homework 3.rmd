@@ -7,11 +7,21 @@ date: '2022-11-01'
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(echo = FALSE, comment = NA)
+library(RCurl)
 library(tidyr)
-library(dplyr)
+library(dplyr) 
+library(RCurl)
 library(ggplot2)
+library(reshape2)
 library(corrplot)
+library(mice)
+library(car)
+library(reshape)
+library(mixtools)
+library(tidyverse)
+library(GGally)
+library(MASS)
 ```
 
 ## Importing Data
@@ -80,13 +90,45 @@ for (col_name in colnames(crime_training %>% dplyr::select(-chas, -target))){
 ```
 *Figure XX: Box plots for each of the variables in the dataset.*
 
-Note that the boxplots shown in Figure xx show that `rad` and `tax` have significantly large interquartile ranges which indicates skewness. The density plots for these variables are provided in the "Transformations" section of this report.
+
+Figure XX shows boxplots for the continuous variables. While `zn`, `rm`, `dis`, `lstat` and `medv` contain outliers, the outliers in general do not seem to be any significant enough to affect the model greatly. However. note that  `rad` and `tax` have significantly large interquartile ranges which indicates skewness.
+
+
+```{r echo = FALSE}
+crime_training %>%
+  keep(is.numeric) %>% 
+  gather() %>% 
+  ggplot(aes(value)) +
+    facet_wrap(~ key, scales = "free") +
+    geom_density()
+```
+*Figure XX: Density plots for continuous variables*
+
+Figure xx reveals that `tax`, `indus`, and `rad` have bimodality. `age` appears to have bimodality as well but it is not as pronounced as the others. `rm` is relatively normally distributed while all of the other variables possess skewness, with `zn` possessing extreme skewness. Dummy variables for each of the bimodal variables were created and are given an explanation in the "Dealing with Bimodal Variables" section.
+
+## Simple Model
+
+A simple model was generated using all of the predictors and served as a baseline to which the other models were compared against.
 
 ```{r}
-ggplot(crime_training, aes(x = ))
+log_reg <- glm(target ~ ., data = crime_training, family = binomial(link = "logit"))
+summary(log_reg)
+```
+`nox` has an extremely low P-value. The U.S. Department of Housing indicates that low-income communities are much more likely than others to experience crime. The National Institute of Environmental Health Sciences indicates that poor communities are exposed to elevated pollution levels, which probably explains why there `nox` is statistically significant. Note that the `lstat`, `indus`, `rm` variables have a p-value greater than 0.05. We reasoned that if the skewed variables were transformed to a normal distribution, than the p-values could decrease, but the p-values actually increased further, thus negating the need to transform the variables.
+
+One of the assumptions for a logistic regression model is linearity of independent variables and log-odds, which explains that the relationship between the logit of the outcome and each continuous independent variable is linear. Using the simple model, we can determine if each of the continuous independent variables meets this assumption. For any independent variables that do not meet this assumption, transformations were performed.
+
+```{r}
+logodds <- log_reg$linear.predictors
+boxTidwell(logodds ~ crime_training$nox)
+
+plot(logodds ~ crime_training$nox)
+
+# par(mfrow = c(2, 2))
+# plot(log_reg)
 ```
 
-Figure XX shows boxplots for the continuous variables. While `zn`, `rm`, `dis`, `lstat` and `medv` contain outliers, the outliers in general do not seem to be any significant enough to affect the model greatly. Cook's distance can only be used after a regression model has been fit to the data. Therefore, outlier analysis was conducted after the models were generated to identify points that negatively affect the regression model.
+Cook's distance was used to identify observations within the dataset that negatively affect the regression model. Figure XX reveals that for the simple model, none of the observations exceed the dashed red lines, indicating that there are no influential datapoints within the dataset when using the simple model.
 
 ### Examining Feature Multicollinearity
 
@@ -94,22 +136,81 @@ Finally, it is imperative to understand which features are correlated with each 
 
 
 ```{r}
-corrplot(cor(subset(crime_training, select = -c(chas, target)), use = "na.or.complete"), 
+corrplot(cor(subset(crime_training, select = -c(chas, target)), use = "na.or.complete"),
          method = 'number',
          type = 'lower',
          diag = FALSE,
-         number.cex = 0.5,
+         number.cex = 0.75,
          tl.cex = 0.5)
 ```
 *Figure xx: Multicollinearity plot for continuous predictor variables*
 
-Figure XX reveals that `rad` and `tax` have an extremely high correlation of 0.91. What this indicates that there is a significant correlation between access to radial highways and property taxes. Property taxes 
+Figure XX reveals that `rad` and `tax` have an extremely high correlation of 0.91. What this indicates that there is a significant correlation between access to radial highways and property taxes. Therefore, the `tax` variable is removed from the dataset to mitigate this high degree of correlation.
 
-## Transformations for normality
+### Dealing with Bimodal Variables
 
-## Simple Model
+Bimodal distributions in data are interesting, in that they represent features which actually contain multiple (2) inherent systems resulting in separated distributional peaks. Our approach to solving this is to create dummy variables representing which side of the local minimum each datapoint falls with respect to it's original bimodal distribution. Three new dummy variables were created for the three bimodal variables (`bi_indus`, `bi_tax`, and `bi_rad`). The algorithm that was written to determine the local minimum was able to determine the local minimum for `indus` and `tax` to be 12.70692 and 624.0793 respectively. However, for the `tax` variable, the density plot shows that the local minimum sits somewhere at 550, which is the value that will be used as the cutoff point. The algorithm was unable to detect a local minimum for `rad`. There is probably not enough information for the right peak for the algorithm to work properly. Nevetheless, we determined that a cutoff value of 15 for this variable would suffice. To summarize:
 
-Fit all the independent variables here and fit the dependent variable as well.
+- `bi_indus`: 1 if `indus` is greater than 12.70692, 0 otherwise.
+- `bi_tax`: 1 if `tax` is greater than 550, 0 otherwise.
+- `bi_rad`: 1 if `rad` is greater than 15, 0 otherwise.
+
+```{r}
+# Finds where two histograms intersect
+histogram_intersection <- function(mu_1, mu_2, sigma_1, sigma_2){
+  if (sigma_1 == sigma_2) stop('Both Sigmas are the same. Get 1/0')
+  (mu_2*(sigma_1^2) - sigma_2*(mu_1*sigma_2 + sigma_1*sqrt((mu_1 - mu_2)^2 + 2*(sigma_1^2 - sigma_2^2)*log(sigma_1/sigma_2))))/(sigma_1^2 - sigma_2^2)
+}
+
+# Fits two histograms to df[,bimodal_var] where `bimodal_var` is a bimodal
+# variable. Than finds the point where the two histograms intersects. This
+# value is returned as `cutoff`
+create_bimodal_cutoff <- function(bimodal_var, df){
+  bimodal_var_data <-  df[,bimodal_var]
+  mixmdl = normalmixEM(bimodal_var_data)
+  
+  mu_1 = mixmdl$mu[1]
+  mu_2 = mixmdl$mu[2]
+  
+  sigma_1 = mixmdl$sigma[1]
+  sigma_2 = mixmdl$sigma[2]
+  
+  cutoff <- histogram_intersection(mu_1, mu_2, sigma_1, sigma_2)
+  print(cutoff)
+  
+  hist(bimodal_var_data, freq = FALSE, main = paste("Histogram and Density Plot of" , bimodal_var))
+  lines(density(bimodal_var_data), lty = 2, lwd = 2)
+  abline(v = cutoff, col = "red", lty = 2, lwd = 3)
+  return(cutoff)
+}
+
+# Creates a dummy variable where any values for df[,bimodal_var] below `cutoff`
+# are given a 1, and any values above are given a 0. Since these are dummy
+# variables, they are converted from `numeric` to `factor`s using the `factor`
+# function.
+append_bimodal_dummy_var <- function(cutoff, bimodal_var, df){
+  df[,paste("bi", bimodal_var, sep = "_")] <- factor((df[,bimodal_var] > cutoff) * 1)
+  return(df)
+}
+
+# Creates dummy variables based on bimodal data. 
+create_bimodal_dummy_var <- function(bimodal_var, df){
+  cutoff <- create_bimodal_cutoff(bimodal_var, df)
+  df <- append_bimodal_dummy_var(cutoff, bimodal_var, df)
+  return(df)
+}
+
+```
+
+```{r}
+for (bimodal_var in c("indus")){
+  crime_training <- create_bimodal_dummy_var(bimodal_var, crime_training)
+}
+
+crime_training <- append_bimodal_dummy_var(15, "rad", crime_training)
+crime_training <- append_bimodal_dummy_var(550, "tax", crime_training)
+```
+
 
 ## Works Cited
 
@@ -118,3 +219,10 @@ Fit all the independent variables here and fit the dependent variable as well.
 [2] How to Calculate Correlation Between Categorical Variables (Statology): https://www.statology.org/correlation-between-categorical-variables/
 
 [3] The 6 Assumptions of Logistic Regression (Statology): https://www.statology.org/assumptions-of-logistic-regression/
+
+[4] Neighborhoods and Violent Crime (U.S. Department of Housing) https://www.huduser.gov/portal/periodicals/em/summer16/highlight2.html
+
+[5] Poor Communities Exposed to Elevated Air Pollution Levels
+https://www.niehs.nih.gov/research/programs/geh/geh_newsletter/2016/4/spotlight/poor_communities_exposed_to_elevated_air_pollution_levels.cfm
+
+[6] https://github.com/kennethleungty/Logistic-Regression-Assumptions/blob/main/Box-Tidwell-Test-in-R.ipynb
