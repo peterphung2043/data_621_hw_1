@@ -31,6 +31,7 @@ library(regclass)
 crime_eval <- read.csv("crime-evaluation-data_modified.csv")
 crime_training <- read.csv("crime-training-data_modified.csv")
 
+crime_training_copy <- crime_training
 crime_training[crime_training == 0.0] = 1e-6
 ```
 
@@ -241,6 +242,81 @@ target_variables <- c("lstat", "dis", "age", "nox", "ptratio")
 for (target_var in target_variables){
   crime_training[,paste("log", target_var, sep = "_")] <- log(crime_training[target_var])
 }
+```
+
+
+## Model Evaluation
+
+ROC Curves
+
+```{r}
+
+## ROC function for step 10
+ROC <- function(x, y){
+  x <- x[order(y, decreasing = TRUE)]
+  TPR <- cumsum(x) / sum(x)
+  FPR <- cumsum(!x) / sum(!x)
+  df <- data.frame(TPR, FPR, x)
+  
+  FPR_df <- c(diff(df$FPR), 0)
+  TPR_df <- c(diff(df$TPR), 0)
+  area_under_curve <- sum(df$TPR * FPR_df) + sum(TPR_df * FPR_df)/2
+  
+  plot(df$FPR, df$TPR, type = "l",
+       main = "ROC ",
+       xlab = "FPR",
+       ylab = "TPR")
+  abline(a = 0, b = 1)
+  legend("center", legend= c("AUC", round(area_under_curve, 4)))
+  
+}
+ROC(data$class,data$scored.probability)
+```
+
+
+```{r recall_function, results = FALSE}
+
+## Sensitivity function
+##The sensitivity/recall contains 2 values corresponding to the classes 0, and 1. 
+##In binary classification tasks, we will look at the values of the positive 
+##class (1) for reporting metrics.
+recall <- function(x){
+  TP <- sum(x$class == 1 & x$scored.class == 1)
+  FN <- sum(x$class == 1 & x$scored.class == 0)
+  
+  round(TP/(TP+FN), 4)
+}
+recall_score = recall(data)
+
+recall_score
+```
+
+```{r precision_function, results = FALSE}
+
+## Precision function
+##The precision contains 2 values corresponding to the classes 0, and 1. 
+##In binary classification tasks, we will look at the values of the 
+##positive class (1) for reporting metrics.
+precision <- function(x){
+  TP <- sum(x$class == 1 & x$scored.class == 1)
+  FP <- sum(x$class == 0 & x$scored.class == 1)
+  
+  round(TP/(TP+FP), 4)
+}
+precision_score = precision(data)
+
+precision_score
+```
+
+```{r confusion_matrix, comment=NA}
+
+##creating confusion matrix
+set.seed(123)
+cm <- confusionMatrix(data = as.factor(data$scored.class),
+                      reference = as.factor(data$class),
+                      mode = "everything",
+                      positive = "1")
+cm
 ```
 
 
