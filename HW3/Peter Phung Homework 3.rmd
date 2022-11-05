@@ -52,7 +52,7 @@ library(regclass)
 crime_eval <- read.csv("https://raw.githubusercontent.com/peterphung2043/data_621_hw_1/main/HW3/crime-evaluation-data_modified.csv")
 crime_training <- read.csv("https://raw.githubusercontent.com/peterphung2043/data_621_hw_1/main/HW3/crime-training-data_modified.csv")
 
-crime_training[crime_training == 0.0] = 1e-6
+#crime_training[crime_training == 0.0] = 1e-6  #silenced to remove inconsistent value interpretation (removed scientific notation).
 ```
 
 ## Problem Statement and Goals
@@ -86,7 +86,38 @@ A summary of the variables is shown below. See that within the summary, there do
 summary(crime_training)
 ```
 
-**converting the variables class can be performed during later**
+**showing a bionomial distribution**
+The multivariate plot distribution focus on the dependent variable, `target`, against other independent variables. All points are colored by `target`. 
+```{r}
+crime_training %>% 
+  gather(-target, key = "var", value = "value") %>%
+  ggplot(aes(x = factor(target), y = value, color= factor(target))) +
+  geom_jitter() +
+  facet_wrap(~ var, scales = "free") +
+  labs(title = "Neighborhood Crime Target Data",
+       subtitle = "Target Factor",
+       caption = "DATA 621",
+       tag = "Binomial Distribution Plot",
+       y = "factors",
+       x = "Target") +
+  theme_bw() 
+```
+
+
+**Frequency distribution of the possible number of successful outcome in a given number of trials in each of which there is the same probability of success**
+```{r}
+train_count <- crime_training %>%
+  count(target) %>%
+  mutate(total=sum(n), percent = 100 * n/total)
+
+kable(train_count)
+```
+
+
+
+
+
+**converting the variables class can be performed later in the analysis**
 ```{r, comment = NA}
 #view data set variables summary statistics
 crime_training$chas <- factor(crime_training$chas)
@@ -94,6 +125,12 @@ crime_training$target <- factor(crime_training$target)
 
 summary(crime_training)
 ```
+
+
+
+
+
+
 
 Figure XX reveals that there are no missing values within the dataset. Therefore, no imputing is required for this dataset.
 
