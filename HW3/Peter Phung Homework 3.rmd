@@ -8,6 +8,26 @@ date: '2022-11-01'
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, comment = NA)
+```
+
+```{r}
+#alternative to install or load R packages
+install_or_load_pack <- function(pkg) {
+  create.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
+  
+  if (length(create.pkg))
+    install.packages(create.pkg, dependencies = TRUE)
+  sapply(pkg, require, character.only = TRUE)
+}
+```
+
+```{r}
+#required libraries
+packages <- c("RCurl", "tidyr", "dplyr", "reshape2", "corrplot", "mice", "car", "reshape", "mixtools", "tidyverse", "GGally", "MASS", "regclass")
+```
+
+```{r eval=FALSE}
+#initial version on loading libraries
 library(RCurl)
 library(tidyr)
 library(dplyr) 
@@ -28,10 +48,11 @@ library(regclass)
 ## Importing Data
 
 ```{r}
-crime_eval <- read.csv("crime-evaluation-data_modified.csv")
-crime_training <- read.csv("crime-training-data_modified.csv")
+#load data sets from GitHub repository
+crime_eval <- read.csv("https://raw.githubusercontent.com/peterphung2043/data_621_hw_1/main/HW3/crime-evaluation-data_modified.csv")
+crime_training <- read.csv("https://raw.githubusercontent.com/peterphung2043/data_621_hw_1/main/HW3/crime-training-data_modified.csv")
 
-crime_training[crime_training == 0.0] = 1e-6
+#crime_training[crime_training == 0.0] = 1e-6  #silenced to remove inconsistent value interpretation (removed scientific notation).
 ```
 
 ## Problem Statement and Goals
@@ -58,12 +79,57 @@ The following is a summary of the variables provided within the data to generate
 
 A summary of the variables is shown below. See that within the summary, there does not seem to be any extremely high or extremely low values relative to the medians and means for each of the continuous predictor variables. The single binary predictor variable `chas` has reasonable values as well.
 
+
+**alternative on viewing the data set variables for descriptive statistics**
+```{r}
+#view data set variables summary statistics
+summary(crime_training)
+```
+
+**showing a bionomial distribution**
+The multivariate plot distribution focus on the dependent variable, `target`, against other independent variables. All points are colored by `target`. 
+```{r}
+crime_training %>% 
+  gather(-target, key = "var", value = "value") %>%
+  ggplot(aes(x = factor(target), y = value, color= factor(target))) +
+  geom_jitter() +
+  facet_wrap(~ var, scales = "free") +
+  labs(title = "Neighborhood Crime Target Data",
+       subtitle = "Target Factor",
+       caption = "DATA 621",
+       tag = "Binomial Distribution Plot",
+       y = "factors",
+       x = "Target") +
+  theme_bw() 
+```
+
+
+**Frequency distribution of the possible number of successful outcome in a given number of trials in each of which there is the same probability of success**
+```{r}
+train_count <- crime_training %>%
+  count(target) %>%
+  mutate(total=sum(n), percent = 100 * n/total)
+
+kable(train_count)
+```
+
+
+
+
+
+**converting the variables class can be performed later in the analysis**
 ```{r, comment = NA}
+#view data set variables summary statistics
 crime_training$chas <- factor(crime_training$chas)
 crime_training$target <- factor(crime_training$target)
 
 summary(crime_training)
 ```
+
+
+
+
+
 
 
 Figure XX reveals that there are no missing values within the dataset. Therefore, no imputing is required for this dataset.
