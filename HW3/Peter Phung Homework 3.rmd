@@ -542,6 +542,10 @@ colnames(eval_pred_df) <- c("Probabilities", "Classifications")
 write.csv(eval_pred_df, file = "probabilities_classifications.csv")
 ```
 
+## Appendix
+
+The RMD file that contains the code used to perform the analysis in this report can be accessed here: https://github.com/peterphung2043/data_621_hw_1/blob/main/HW3/Peter%20Phung%20Homework%203.rmd
+
 ## Works Cited
 
 [1] What is Cook's Distance? (StatisticsHowTo): https://www.statisticshowto.com/cooks-distance/
