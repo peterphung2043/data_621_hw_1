@@ -3,14 +3,20 @@ title: "Homework 3"
 output:
   pdf_document: default
   html_document: default
+author: "Coffy Andrews-Guo, Krutika Patel, Alec McCabe, Ahmed Elsaeyed, Peter Phung"
 date: '2022-11-01'
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE, comment = NA)
+knitr::opts_chunk$set(echo = FALSE, comment = NA, warning = FALSE)
+```
+
+
+```{r load-packages, include=FALSE}
+#initial version on loading libraries
 library(RCurl)
-library(tidyr)
-library(dplyr) 
+library(tidyverse)
+library(dplyr)
 library(RCurl)
 library(ggplot2)
 library(reshape2)
@@ -19,27 +25,36 @@ library(mice)
 library(car)
 library(reshape)
 library(mixtools)
-library(tidyverse)
 library(GGally)
 library(MASS)
+library(magrittr)
 library(regclass)
+library(kableExtra)
+library(caTools)
+library(PRROC)
+library(pROC)
+library(kableExtra)
+library(stringr)
 ```
-
-## Importing Data
 
 ```{r}
-crime_eval <- read.csv("crime-evaluation-data_modified.csv")
-crime_training <- read.csv("crime-training-data_modified.csv")
+#load data sets from GitHub repository
+crime_eval <- read.csv("https://raw.githubusercontent.com/peterphung2043/data_621_hw_1/main/HW3/crime-evaluation-data_modified.csv")
+crime_training_modified <- read.csv("https://raw.githubusercontent.com/peterphung2043/data_621_hw_1/main/HW3/crime-training-data_modified.csv")
 
-crime_training_copy <- crime_training
-crime_training[crime_training == 0.0] = 1e-6
+crime_training_original <- crime_training_modified
+crime_training_original$chas <- factor(crime_training_original$chas)
+crime_training_original$target <- factor(crime_training_original$target)
+
+crime_eval$chas <- factor(crime_eval$chas)
+#crime_training[crime_training == 0.0] = 1e-6  #silenced to remove inconsistent value interpretation (removed scientific notation).
 ```
 
-## Problem Statement and Goals
+# Problem Statement and Goals
 
 In this report, we generate a binary logistic regression model that is able to predict whether or not the crime rate for a neighborhood is above the median crime rate (1) or not (0). The independent and dependent variables that are used in order to generate this model use data from various neighborhoods of a major city. The analysis detailed in this report shows the testing of several models from which a best model was selected based on model performance and various metrics. 
 
-## Data Exploration
+# Data Exploration
 
 The following is a summary of the variables provided within the data to generate the binary logistic regression model:
 
@@ -59,18 +74,41 @@ The following is a summary of the variables provided within the data to generate
 
 A summary of the variables is shown below. See that within the summary, there does not seem to be any extremely high or extremely low values relative to the medians and means for each of the continuous predictor variables. The single binary predictor variable `chas` has reasonable values as well.
 
-```{r, comment = NA}
-crime_training$chas <- factor(crime_training$chas)
-crime_training$target <- factor(crime_training$target)
 
-summary(crime_training)
+```{r}
+#view data set variables summary statistics
+summary(crime_training_original)
+```
+
+The multivariate plot distribution focus on the dependent variable, `target`, against other independent variables. All points are colored by `target`. 
+```{r, fig.align='center'}
+crime_training_original %>% 
+  gather(-target, key = "var", value = "value") %>%
+  ggplot(aes(x = factor(target), y = value, color= factor(target))) +
+  geom_jitter() +
+  facet_wrap(~ var, scales = "free") +
+  labs(title = "Neighborhood Crime Target Data",
+       subtitle = "Target Factor",
+       y = "factors",
+       x = "Target") +
+  theme_bw() 
+```
+*Figure 1: Binomial Distribution plots for each of the predictor variables in the dataset*
+
+`nox`, `tax`, and `zn` look separated between the factors. Therefore, we reasoned that these were good variables to add in a logistic regression model.
+
+```{r, include = FALSE}
+#view data set variables summary statistics
+crime_training_modified$chas <- factor(crime_training_modified$chas)
+crime_training_modified$target <- factor(crime_training_modified$target)
 ```
 
 
-Figure XX reveals that there are no missing values within the dataset. Therefore, no imputing is required for this dataset.
+
+Figure 2 reveals that there are no missing values within the dataset. Therefore, no imputing is required for this dataset.
 
 ```{r}
-crime_training  %>%
+crime_training_original  %>%
   summarise_all(list(~is.na(.)))%>%
   pivot_longer(everything(),
                names_to = "variables", values_to="missing") %>%
@@ -80,73 +118,36 @@ crime_training  %>%
   scale_fill_manual(values=c("skyblue3","gold"))+
   theme(axis.title.y=element_blank()) + theme_classic()
 ```
-*Figure XX: Chart showing the count of missing values for each of the variables in the dataset. Note that since there are no missing values, the legend only shows one item.*
+*Figure 2: Chart showing the count of missing values for each of the variables in the dataset. Note that since there are no missing values, the legend only shows one item.*
 
 ### Outliers
 
 ```{r echo = FALSE}
 par(mfrow = c(4, 3), mai = c(0.1, 0.6, 0.1, 0.1))
 
-for (col_name in colnames(crime_training %>% dplyr::select(-chas, -target))){
-  boxplot(crime_training[[col_name]],
+for (col_name in colnames(crime_training_original %>% dplyr::select(-chas, -target))){
+  boxplot(crime_training_original[[col_name]],
           ylab = col_name)
 }
 ```
-*Figure XX: Box plots for each of the variables in the dataset.*
+*Figure 3: Box plots for each of the variables in the dataset.*
 
 
-Figure XX shows boxplots for the continuous variables. While `zn`, `rm`, `dis`, `lstat` and `medv` contain outliers, the outliers in general do not seem to be any significant enough to affect the model greatly. However. note that  `rad` and `tax` have significantly large interquartile ranges which indicates skewness.
+Figure 3 shows boxplots for the continuous variables. While `zn`, `rm`, `dis`, `lstat` and `medv` contain outliers, the outliers in general do not seem to be any significant enough to affect the model greatly. However. note that  `rad` and `tax` have significantly large interquartile ranges which indicates skewness.
 
 
 ```{r echo = FALSE}
-crime_training %>%
+crime_training_original %>%
   keep(is.numeric) %>% 
   gather() %>% 
   ggplot(aes(value)) +
     facet_wrap(~ key, scales = "free") +
     geom_density()
 ```
-*Figure XX: Density plots for continuous variables*
+*Figure 4: Density plots for continuous variables*
 
-Figure xx reveals that `tax`, `indus`, and `rad` have bimodality. `age` appears to have bimodality as well but it is not as pronounced as the others. `rm` is relatively normally distributed while all of the other variables possess skewness, with `zn` possessing extreme skewness. Dummy variables for each of the bimodal variables were created and are given an explanation in the "Dealing with Bimodal Variables" section.
+Figure 4 reveals that `tax`, `indus`, and `rad` have bimodality. `age` appears to have bimodality as well but it is not as pronounced as the others. `rm` is relatively normally distributed while all of the other variables possess skewness, with `zn` possessing extreme skewness. Dummy variables for each of the bimodal variables were created and are given an explanation in the "Dealing with Bimodal Variables" section.
 
-## Simple Model
-
-A simple model was generated using all of the predictors and served as a baseline to which the other models were compared against.
-
-```{r}
-simple_log_reg <- glm(target ~ ., data = crime_training, family = binomial(link = "logit"))
-summary(simple_log_reg)
-```
-
-## Goodness of Fit Tests for Simple Model
-
-```{r}
-check_regression(simple_log_reg)
-```
-
-
-`nox` has an extremely low P-value. The U.S. Department of Housing indicates that low-income communities are much more likely than others to experience crime. The National Institute of Environmental Health Sciences indicates that poor communities are exposed to elevated pollution levels, which probably explains why there `nox` is statistically significant. Note that the `lstat`, `indus`, `rm` variables have a p-value greater than 0.05. We reasoned that if the skewed variables were transformed to a normal distribution, than the p-values could decrease, but the p-values actually increased further, thus negating the need to transform the variables.
-
-```{r}
-par(mfrow = c(2, 2))
-plot(simple_log_reg)
-```
-
-Cook's distance was used to identify observations within the dataset that negatively affect the regression model. Figure XX reveals that for the simple model, none of the observations exceed the dashed red lines, indicating that there are no influential datapoints within the dataset when using the simple model.
-
-### ANOVA Chi Square Test and VIF Calculation for Simple Linear Model
-
-An ANOVA Chi-square test can be used in order to check the overall effect of variables on the dependent variable. The output below shows that `chas`, `age`, and `lstat` are not statistically significant. However, while `chas` and `lstat` were not significant in the simple model, the variable `age` was. Therefore, we leave these variables as is and perform elimination. The VIF was also calculated for all of the variables in the simple linear model. A general rule of thumb is that a VIF of 5 indicates severe multicollinearity which `rm` and `medv` have. Therefore, `rm` and `medv` were removed from the model.
-
-
-```{r}
-anova(simple_log_reg, test = 'Chisq')
-```
-
-```{r}
-car::vif(simple_log_reg)
-```
 
 ### Examining Feature Multicollinearity
 
@@ -154,22 +155,22 @@ Finally, it is imperative to understand which features are correlated with each 
 
 
 ```{r}
-corrplot(cor(subset(crime_training, select = -c(chas, target)), use = "na.or.complete"),
+corrplot(cor(subset(crime_training_original, select = -c(chas, target)), use = "na.or.complete"),
          method = 'number',
          type = 'lower',
          diag = FALSE,
          number.cex = 0.75,
          tl.cex = 0.5)
 ```
-*Figure xx: Multicollinearity plot for continuous predictor variables*
+*Figure 5: Multicollinearity plot for continuous predictor variables*
 
-Figure XX reveals that `rad` and `tax` have an extremely high correlation of 0.91. What this indicates that there is a significant correlation between access to radial highways and property taxes. Therefore, the `tax` variable should be removed from the dataset because it has a higher p-value in the simple model to mitigate this high degree of correlation.
+Figure 5 reveals that `rad` and `tax` have an extremely high correlation of 0.91. What this indicates that there is a significant correlation between access to radial highways and property taxes. Therefore, the `tax` variable should be removed from the dataset because it has a higher p-value in the simple model to mitigate this high degree of correlation.
 
 ```{r}
-crime_training <- subset(crime_training, select = -c(tax, rm, medv))
+crime_training_modified <- subset(crime_training_modified, select = -c(tax, rm, medv))
 ```
 
-### Dealing with Bimodal Variables
+# Data Preparation
 
 Bimodal distributions in data are interesting, in that they represent features which actually contain multiple (2) inherent systems resulting in separated distributional peaks. Our approach to solving this is to create dummy variables representing which side of the local minimum each datapoint falls with respect to it's original bimodal distribution. Two new dummy variables were created for the two bimodal variables (`bi_indus` and `bi_rad`). The algorithm that was written to determine the local minimum was able to determine the local minimum for `indus` to be 12.70692. The algorithm was unable to detect a local minimum for `rad`. There is probably not enough information for the right peak for the algorithm to work properly. Nevetheless, we determined that a cutoff value of 15 for this variable would suffice. To summarize:
 
@@ -196,7 +197,6 @@ create_bimodal_cutoff <- function(bimodal_var, df){
   sigma_2 = mixmdl$sigma[2]
   
   cutoff <- histogram_intersection(mu_1, mu_2, sigma_1, sigma_2)
-  print(cutoff)
   
   hist(bimodal_var_data, freq = FALSE, main = paste("Histogram and Density Plot of" , bimodal_var))
   lines(density(bimodal_var_data), lty = 2, lwd = 2)
@@ -219,11 +219,19 @@ create_bimodal_dummy_var <- function(bimodal_var, df){
 }
 ```
 
-```{r}
+```{r, echo=FALSE,results='hide',fig.keep='all'}
 for (bimodal_var in c("indus")){
-  crime_training <- create_bimodal_dummy_var(bimodal_var, crime_training)
+  crime_training_modified <- create_bimodal_dummy_var(bimodal_var, crime_training_modified)
 }
-crime_training <- append_bimodal_dummy_var(15, "rad", crime_training)
+crime_training_modified <- append_bimodal_dummy_var(15, "rad", crime_training_modified)
+```
+*Figure 6: Histogram of `indus`. The dashed red line indicates the intersection point between two fitted histograms for this bimodal variable.*
+
+```{r include = FALSE}
+for (bimodal_var in c("indus")){
+  crime_eval <- create_bimodal_dummy_var(bimodal_var, crime_eval)
+}
+crime_eval <- append_bimodal_dummy_var(15, "rad", crime_eval)
 ```
 
 ### Skewed Variables
@@ -240,14 +248,86 @@ The variables, `lstat`, `dis`, `age`, `nox`, and `ptratio` all exhibit skewness.
 target_variables <- c("lstat", "dis", "age", "nox", "ptratio")
 
 for (target_var in target_variables){
-  crime_training[,paste("log", target_var, sep = "_")] <- log(crime_training[target_var])
+  crime_training_modified[,paste("log", target_var, sep = "_")] <- log(crime_training_modified[target_var])
+  crime_eval[,paste("log", target_var, sep = "_")] <- log(crime_eval[target_var])
 }
 ```
 
+# Split Data Into Testing and Training
 
-## Model Evaluation
+The data was into testing and training subsets such that 60% of it will be used to train, and 40% to test. The first row shows the split for the testing data while the second row shows the split for the training data.
 
-ROC Curves
+```{r }
+set.seed(123)
+original_split <- sample.split(crime_training_original$target, SplitRatio = 0.8)
+original_train <-  subset(crime_training_original, original_split == TRUE)
+original_test <- subset(crime_training_original, original_split == FALSE)
+
+table(original_test$target)
+table(original_train$target)
+
+modified_split <- sample.split(crime_training_modified$target, SplitRatio = 0.2)
+modified_train <-  subset(crime_training_modified, modified_split == TRUE)
+modified_test <- subset(crime_training_modified, modified_split == FALSE)
+
+```
+
+# Build Models
+```{r accuracy_function, results = FALSE}
+
+# Accuracy Function
+accuracy <- function(true_values, predictions){
+  TP <- sum(true_values == 1 & predictions == 1)
+  TN <- sum(true_values == 0 & predictions == 0)
+  round((TP + TN)/length(true_values), 4)
+}
+```
+
+```{r error_function, results = FALSE}
+
+## Classification error rate function
+error <- function(true_values, predictions){
+  FP <- sum(true_values == 0 & predictions == 1)
+  FN <- sum(true_values == 1 & predictions == 0)
+  round((FP + FN)/length(true_values), 4)
+}
+```
+
+```{r fscore_function, results = FALSE}
+
+## F-score function
+fscore <- function(precision_score, recall_score) {
+  (2* precision_score * recall_score)/(precision_score + recall_score)
+}
+```
+
+```{r precision_function, results = FALSE}
+
+## Precision function
+##The precision contains 2 values corresponding to the classes 0, and 1. 
+##In binary classification tasks, we will look at the values of the 
+##positive class (1) for reporting metrics.
+precision <- function(true_values, predictions){
+  TP <- sum(true_values == 1 & predictions == 1)
+  FP <- sum(true_values == 0 & predictions == 1)
+  
+  round(TP/(TP+FP), 4)
+}
+```
+
+```{r recall_function, results = FALSE}
+
+## Sensitivity function
+##The sensitivity/recall contains 2 values corresponding to the classes 0, and 1. 
+##In binary classification tasks, we will look at the values of the positive 
+##class (1) for reporting metrics.
+recall <- function(true_values, predictions){
+  TP <- sum(true_values == 1 & predictions == 1)
+  FN <- sum(true_values == 1 & predictions == 0)
+  
+  round(TP/(TP+FN), 4)
+}
+```
 
 ```{r}
 
@@ -270,55 +350,197 @@ ROC <- function(x, y){
   legend("center", legend= c("AUC", round(area_under_curve, 4)))
   
 }
-ROC(data$class,data$scored.probability)
 ```
 
 
-```{r recall_function, results = FALSE}
+```{r, message = FALSE, echo = FALSE}
+#create data frame with 0 rows and 3 columns
+tracker <- data.frame(matrix(ncol = 8, nrow = 0))
 
-## Sensitivity function
-##The sensitivity/recall contains 2 values corresponding to the classes 0, and 1. 
-##In binary classification tasks, we will look at the values of the positive 
-##class (1) for reporting metrics.
-recall <- function(x){
-  TP <- sum(x$class == 1 & x$scored.class == 1)
-  FN <- sum(x$class == 1 & x$scored.class == 0)
+#provide column names
+colnames(tracker) <- c("Model", "Precision", "Recall", "AIC", "AUC", "F-score", "Accuracy", "Error")
+
+#create function to update the tracker
+update_tracker <- function(tracker, model_name, true_values, predictions, model_object, df){
+  accuracy = accuracy(true_values, predictions)
+  error = error(true_values, predictions)
+  recall = recall(true_values, predictions)
+  precision = precision(true_values, predictions)
+  aic = model_object$aic
+  auc = as.numeric(str_extract(roc(true_values,  predict(model_object, df, interval = "prediction"))$auc, regex("\\d\\.\\d*")))
+  f_score = fscore(precision, recall)
   
-  round(TP/(TP+FN), 4)
-}
-recall_score = recall(data)
-
-recall_score
-```
-
-```{r precision_function, results = FALSE}
-
-## Precision function
-##The precision contains 2 values corresponding to the classes 0, and 1. 
-##In binary classification tasks, we will look at the values of the 
-##positive class (1) for reporting metrics.
-precision <- function(x){
-  TP <- sum(x$class == 1 & x$scored.class == 1)
-  FP <- sum(x$class == 0 & x$scored.class == 1)
   
-  round(TP/(TP+FP), 4)
+  tracker[nrow(tracker) + 1,] <- c(model_name, round(precision, 2), round(recall, 2), round(aic, 2), round(auc, 2), round(f_score, 3), round(accuracy, 2), round(error, 2))
+  return(tracker)
 }
-precision_score = precision(data)
-
-precision_score
 ```
 
-```{r confusion_matrix, comment=NA}
+## Simple Model
 
-##creating confusion matrix
-set.seed(123)
-cm <- confusionMatrix(data = as.factor(data$scored.class),
-                      reference = as.factor(data$class),
-                      mode = "everything",
-                      positive = "1")
-cm
+A simple model was generated using all of the predictors and served as a baseline to which the other models were compared against.
+
+```{r}
+simple_log_reg <- glm(target ~ ., data = original_train, family = binomial(link = "logit"))
+summary(simple_log_reg)
+
+simple_predictions <- predict.glm(simple_log_reg, original_test, type = "response")
+
+simple_predictions_binary <- ifelse(simple_predictions > 0.5, 1, 0)
+
+tracker <- update_tracker(tracker, "Simple", original_test$target, simple_predictions_binary, simple_log_reg, original_test)
+```
+`nox` has an extremely low P-value. The U.S. Department of Housing indicates that low-income communities are much more likely than others to experience crime. The National Institute of Environmental Health Sciences indicates that poor communities are exposed to elevated pollution levels, which probably explains why there `nox` is statistically significant. Note that the `lstat`, `indus`, `rm` variables have a p-value greater than 0.05. We reasoned that if the skewed variables were transformed to a normal distribution, than the p-values could decrease, but the p-values actually increased further, thus negating the need to transform the variables.
+
+### Classification Matrix for Simple Model
+
+The classification matrix for the simple model is provided below.
+
+```{r}
+simple_model_cm <- as.matrix(table(Actual = original_test$target, Predicted = simple_predictions_binary))
+simple_model_cm
+```
+## Model with Bimodal Variables and Log Transformed Variables
+
+The following model includes the bimodal and log transformed variables in addition to the original variables that were used in the simple model.
+
+```{r}
+log_reg_clean <- glm(target ~ ., data = modified_train, family = binomial(link = "logit"))
+summary(log_reg_clean)
+
+clean_predictions <- predict.glm(log_reg_clean, modified_test, type = "response")
+
+clean_predictions_binary <- ifelse(clean_predictions > 0.5, 1, 0)
+
+tracker <- update_tracker(tracker, "Transformed", modified_test$target, clean_predictions_binary, log_reg_clean, modified_test)
 ```
 
+### Classification Matrix for Model with Bimodal Variables and Log Transformed Variables
+
+The classification matrix for the model with bimodal and log-transformed variables is provided below.
+
+```{r}
+log_reg_clean_cm <- as.matrix(table(Actual = modified_test$target, Predicted = clean_predictions_binary))
+log_reg_clean_cm
+```
+
+## Negative Bimodal Model
+
+We fitted a negaative binomial generalized linear model to the original dataset with bimodal and log transformed variables. The output of the model is shown below.
+
+```{r}
+nb1 <- glm.nb(as.numeric(target) ~., data = modified_train)
+summary(nb1)
+
+nb_predictions <- predict.glm(nb1, modified_test, type = "response")
+
+nb_predictions_binary <- ifelse(nb_predictions > 0.5, 1, 0)
+
+tracker <- update_tracker(tracker, "Negative Bimodal", modified_test$target, nb_predictions_binary, nb1, modified_test)
+```
+
+
+### Confusion Matrix for Negative Bimodal Model
+
+The confusion matrix for the negative bimodal model is provided below.
+
+```{r}
+nb1_cm <- as.matrix(table(Actual = modified_test$target, Predicted = nb_predictions_binary))
+nb1_cm
+```
+
+## Model with P-Values below 0.05
+
+For this model, the predictor variables with p-values below 0.05 from the second model (Model with Bimodal Variables and Log Transformed Variables) were used and the output is shown below.
+
+```{r}
+parsed_model <- glm(target ~ chas + nox + dis + age + rad, data = modified_train, family = binomial(link = "logit"))
+summary(parsed_model)
+
+parsed_predictions <- predict.glm(parsed_model, modified_test, type = "response")
+parsed_predictions_binary <- ifelse(parsed_predictions > 0.5, 1, 0)
+
+tracker <- update_tracker(tracker, "Reduced Transformed", modified_test$target, parsed_predictions_binary, parsed_model, modified_test)
+```
+
+### Confusion Matrix for Model with P-Values below 0.05
+
+The confusion matrix for the model with p-values below 0.05 is provided below.
+
+```{r}
+parsed_model_cm <- as.matrix(table(Actual = modified_test$target, Predicted = parsed_predictions_binary))
+parsed_model_cm
+```
+
+## Step AIC Model
+
+Step AIC works by deselecting features that negatively affect the AIC. It selects the model with not only the best AIC score but also a model with less predictors than the full model, since the full model may have predictors that do not contribute or negatively contribute to the model's performance. The direction for the Step AIC algorithm was set to `both`, because this implements both forward and backward elimination in order to decide if a predictor negatively affects the model's performance. The original model was used in order to use the Step AIC algorithm in R and the output is shown below.
+
+```{r}
+model5 <- stepAIC(simple_log_reg, direction = "both", trace = FALSE)
+summary(model5)
+
+model5_predictions <- predict.glm(parsed_model, original_test, type = "response")
+model5_predictions_binary <- ifelse(model5_predictions > 0.5, 1, 0)
+
+tracker <- update_tracker(tracker, "Step AIC", original_test$target, model5_predictions_binary, model5, original_test)
+```
+
+### Confusion Matrix for Step AIC Model
+
+The confusion matrix for the Step AIC model is provided below.
+
+```{r}
+model5_cm <- as.matrix(table(Actual = original_test$target, Predicted = model5_predictions_binary))
+model5_cm
+```
+
+# Model Selection
+
+```{r}
+knitr::kable(tracker)
+```
+*Table 1: Model metrics*
+
+```{r, message = FALSE, echo = FALSE}
+# ggplot(tracker, aes(x=factor(Model, level=c('Simple', 'Transformed', 'Negative Bimodal', 'Reduced Transformed')), y=Precision)) +
+#   geom_bar(stat = "identity") +
+#   ylab("Precision") +
+#   xlab("Model") +
+#   theme(axis.text.x = element_text(angle = 90))
+
+plt <- melt(tracker[,c('Model','Precision','Recall','AUC','F-score','Accuracy','Error')],id.vars = 1)
+
+ggplot(plt, aes(x=factor(Model, level=c('Simple', 'Transformed', 'Negative Bimodal', 'Reduced Transformed', 'Step AIC')), y = value)) + 
+  geom_bar(aes(fill = variable),stat = "identity",position = "dodge") +
+  xlab("Model") +
+  ylab("Score") +
+  theme(axis.text.x = element_text(angle = 90))
+```
+*Figure 7: Bar chart of metrics for all 5 models*
+
+For this assignment, we will be choosing Model 2, which utilizes a bimodal distribution flag, as well as transformed data to address skewness. Based on Figure 7, we can also see that this model outperforms the rest in terms of one important metric: Recall (excluding model 3). When addressing a nation's city crime rates, it is important that whichever detection model is used classifies as many at-risk cities correctly as possible. It could be a major issue if an at-risk city was left unattended, and without aid.
+
+Additionally, this model performs roughly as well in terms of precision and F-score to the simple model, while also using less predictor features. This will naturally reduce the cost of performing such an investigation, justifying the reduced precision. It is possible as well that, due to the small size of the dataset, that these values may not reflect the true predictive power of the discussed models.
+
+```{r, echo = FALSE, results = 'hide', fig.keep = 'all', message = FALSE}
+plot(roc(modified_test$target,  predict(log_reg_clean, modified_test, interval = "prediction")), print.auc = TRUE)
+```
+*Figure 8: ROC Curve for selected model (Model with Bimodal Variables and Log Transformed Variables)*
+
+As we see on Figure 8, our model performs really well with an AUC of 0.947.
+
+```{r}
+eval_predictions <- predict.glm(log_reg_clean, crime_eval, type = "response")
+eval_predictions_binary <- ifelse(eval_predictions > 0.5, 1, 0)
+```
+
+```{r}
+eval_pred_df <- data.frame(eval_predictions, eval_predictions_binary)
+colnames(eval_pred_df) <- c("Probabilities", "Classifications")
+
+write.csv(eval_pred_df, file = "probabilities_classifications.csv")
+```
 
 ## Works Cited
 
@@ -333,6 +555,6 @@ cm
 [5] Poor Communities Exposed to Elevated Air Pollution Levels
 https://www.niehs.nih.gov/research/programs/geh/geh_newsletter/2016/4/spotlight/poor_communities_exposed_to_elevated_air_pollution_levels.cfm
 
-[6] https://github.com/kennethleungty/Logistic-Regression-Assumptions/blob/main/Box-Tidwell-Test-in-R.ipynb
+[6] Logistic Regression Assumptions (Kenneth Leung): https://github.com/kennethleungty/Logistic-Regression-Assumptions/blob/main/Box-Tidwell-Test-in-R.ipynb
 
 [7] Logistic Regression Assumptions and Diagnostics in R (STHDA): http://www.sthda.com/english/articles/36-classification-methods-essentials/148-logistic-regression-assumptions-and-diagnostics-in-r/
