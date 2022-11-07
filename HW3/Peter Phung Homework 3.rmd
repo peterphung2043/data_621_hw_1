@@ -23,7 +23,7 @@ install_or_load_pack <- function(pkg) {
 
 ```{r}
 #required libraries
-packages <- c("RCurl", "tidyr", "dplyr", "reshape2", "corrplot", "mice", "car", "reshape", "mixtools", "tidyverse", "GGally", "MASS", "regclass")
+packages <- c("RCurl", "tidyr", "dplyr", "reshape2", "corrplot", "mice", "car", "reshape", "mixtools", "tidyverse", "GGally", "MASS", "regclass", "knitr", "kableExtra")
 ```
 
 ```{r eval=FALSE}
@@ -80,6 +80,15 @@ The following is a summary of the variables provided within the data to generate
 A summary of the variables is shown below. See that within the summary, there does not seem to be any extremely high or extremely low values relative to the medians and means for each of the continuous predictor variables. The single binary predictor variable `chas` has reasonable values as well.
 
 
+```{r}
+#view training data set first 6 rows
+kable(head(crime_training, 6)) %>%
+  kable_styling(font_size = 8, latex_options = "striped")
+```
+
+
+
+
 **alternative on viewing the data set variables for descriptive statistics**
 ```{r}
 #view data set variables summary statistics
@@ -125,10 +134,6 @@ crime_training$target <- factor(crime_training$target)
 
 summary(crime_training)
 ```
-
-
-
-
 
 
 
