@@ -38,7 +38,7 @@ library(stringr)
 ```
 
 ```{r}
-#load data sets from GitHub repository
+#load data sets from GitHub
 crime_eval <- read.csv("https://raw.githubusercontent.com/peterphung2043/data_621_hw_1/main/HW3/crime-evaluation-data_modified.csv")
 crime_training_modified <- read.csv("https://raw.githubusercontent.com/peterphung2043/data_621_hw_1/main/HW3/crime-training-data_modified.csv")
 
