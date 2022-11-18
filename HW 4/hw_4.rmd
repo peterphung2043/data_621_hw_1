@@ -1,0 +1,178 @@
+---
+title: "DATA 621 - Homework 4"
+output:
+  pdf_document: default
+  html_document: default
+date: "2022-11-16"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(ggplot2)
+library(corrplot)
+```
+
+```{r}
+insurance_train_data <- read.csv("insurance_training_data.csv")
+insurance_eval_data <- read.csv("insurance-evaluation-data.csv")
+```
+
+```{r}
+insurance_train_data <- insurance_train_data %>%
+  select(-INDEX) %>%
+    mutate(
+    INCOME = as.numeric(gsub("\\D", "", INCOME)),
+    HOME_VAL = as.numeric(gsub("\\D", "", HOME_VAL)),
+    BLUEBOOK = as.numeric(gsub("\\D", "", BLUEBOOK)),
+    OLDCLAIM = as.numeric(gsub("\\D", "", OLDCLAIM)),
+    MSTATUS = as.factor(str_remove(MSTATUS, "^z_")),
+    SEX = as.factor(str_remove(SEX, "^z_")),
+    EDUCATION = as.factor(str_remove(EDUCATION, "^z_")),
+    JOB = as.factor(str_remove(JOB, "^z_")),
+    CAR_TYPE = as.factor(str_remove(CAR_TYPE, "^z_")),
+    URBANICITY = as.factor(str_remove(URBANICITY, "^z_")),
+    PARENT1 = as.factor(PARENT1),
+    CAR_USE = as.factor(CAR_USE),
+    RED_CAR = as.factor(RED_CAR),
+    REVOKED = as.factor(REVOKED),
+    TARGET_FLAG = as.factor(TARGET_FLAG),
+    KIDSDRIV = as.integer(KIDSDRIV),
+    CLM_FREQ = as.integer(CLM_FREQ),
+    MVR_PTS = as.integer(MVR_PTS))
+
+insurance_eval_data <- insurance_eval_data %>%
+  select(-INDEX) %>%
+    mutate(
+    INCOME = as.numeric(gsub("\\D", "", INCOME)),
+    HOME_VAL = as.numeric(gsub("\\D", "", HOME_VAL)),
+    BLUEBOOK = as.numeric(gsub("\\D", "", BLUEBOOK)),
+    OLDCLAIM = as.numeric(gsub("\\D", "", OLDCLAIM)),
+    MSTATUS = as.factor(str_remove(MSTATUS, "^z_")),
+    SEX = as.factor(str_remove(SEX, "^z_")),
+    EDUCATION = as.factor(str_remove(EDUCATION, "^z_")),
+    JOB = as.factor(str_remove(JOB, "^z_")),
+    CAR_TYPE = as.factor(str_remove(CAR_TYPE, "^z_")),
+    URBANICITY = as.factor(str_remove(URBANICITY, "^z_")),
+    PARENT1 = as.factor(PARENT1),
+    CAR_USE = as.factor(CAR_USE),
+    RED_CAR = as.factor(RED_CAR),
+    REVOKED = as.factor(REVOKED),
+    TARGET_FLAG = as.factor(TARGET_FLAG),
+    KIDSDRIV = as.integer(KIDSDRIV),
+    CLM_FREQ = as.integer(CLM_FREQ),
+    MVR_PTS = as.integer(MVR_PTS))
+```
+
+# Problem Statement and Goals
+
+In this report, we generate two different models; a multiple linear regression model and a binary logistic regression model. The multiple linear regression model contains a target variable called `TARGET_AMT`, which is the amount of money it will cost if the person crashes their car. The binary logistic regression model target variable, `TARGET_FLAG` consists of 0's and 1's. 1 represents that the person was in a car crash, and zero indicates that the person was not in a car crash. The analysis detailed in this report shows the testing of several models from which a best multiple linear regression model and a best binary logistic regression model were selected based on model performance and various metrics. 
+
+# Data Exploration
+
+The following is a summary of the variables provided within the data to generate the binary logistic regression and multiple linear regression models.
+
+```{r table1, echo=FALSE, message=FALSE, warnings=FALSE, results='asis'}
+tabl <- "
+|Variable Name|Definition|Theoretical Effect|
+|---------------|-------------|-------------:|
+|INDEX|Identification Variable (do not use)|None|
+|TARGET_FLAG|Was Car in a crash? 1=YES 0=NO|None|
+|TARGET_AMT|If car was in a crash, what was the cost|None|
+|AGE|Age of Driver|Very young people tend to be risky. Maybe very old people also.|
+|BLUEBOOK|Value of Vehicle|Unknown effect on probability of collision, but probably effect the payout if there is a crash|
+|CAR_AGE|Vehicle Age|Unknown effect on probability of collision, but probably effect the payout if there is a crash|
+|CAR_TYPE|Type of Car|Unknown effect on probability of collision, but probably effect the payout if there is a crash|
+|CAR_USE|Vehicle Use|Commercial vehicles are driven more, so might increase probability of collision|
+|CLM_FREQ|# Claims (Past 5 Years)|The more claims you filed in the past, the more you are likely to file in the future|
+|EDUCATION|Max Education Level|Unknown effect, but in theory more educated people tend to drive more safely|
+|HOMEKIDS|# Children at Home|Unknown effect|
+|HOME_VAL|Home Value|In theory, home owners tend to drive more responsibly|
+|INCOME|Income|In theory, rich people tend to get into fewer crashes|
+|JOB|Job Category|In theory, white collar jobs tend to be safer|
+|KIDSDRIV|# Driving Children|When teenagers drive your car, you are more likely to get into crashes|
+|MSTATUS|Marital Status|In theory, married people drive more safely
+|MVR_PTS|Motor Vehicle Record Points|If you get lots of traffic tickets, you tend to get into more crashes|
+|OLDCLAIM|Total Claims (Past 5 Years)|If your total payout over the past five years was high, this suggests future payouts will be high|
+|PARENT1|Single Parent|Unknown effect|
+|RED_CAR|A Red Car|Urban legend says that red cars (especially red sports cars) are more risky. Is that true?|
+|REVOKED|License Revoked (Past 7 Years)|If your license was revoked in the past 7 years, you probably are a more risky driver.|
+|SEX|Gender|Urban legend says that women have less crashes then men. Is that true?|
+|TIF|Time in Force|People who have been customers for a long time are usually more safe.|
+|TRAVTIME|Distance to Work|Long drives to work usually suggest greater risk|
+|URBANICITY|Home/Work Area| Unknown|
+|YOJ|Years on Job|People who stay at a job for a long time are usually more safe|
+"
+cat(tabl) # output the table in a format good for HTML/PDF/docx conversion
+```
+
+A summary of the variables is shown below. The `INDEX` variable has been removed. The summary below reveals that `AGE`, `VOJ`, `INCOME`, `HOME_VAL`, and `CAR_AGE` have missing values.
+
+```{r}
+#view data set variables summary statistics
+summary(insurance_train_data)
+```
+
+```{r message = FALSE, echo = FALSE, warning = FALSE, results = 'hide', fig.keep='all'}
+insurance_train_data %>% dplyr::select(-TARGET_FLAG, -TARGET_AMT) %>%
+  keep(is.numeric) %>% 
+  gather() %>% 
+  ggplot(aes(value)) +
+    facet_wrap(~ key, scales = "free") +
+    geom_density()
+```
+*Figure XX: Histograms for all of the variables.*
+
+The density plots above show that `BLUEBOOK`, `INCOME`, `KIDSDRIV`, `MVR_PTS`, `OLDCLAIM`, `TIF` and `TRAVTIME` could be transformed in order to fit the normal distribution assumption of a linear regression model. We also create new variables; `bi_CAR_AGE` and `bi_HOME_VAL`. The original variables have a bimodal distribution, so 0 is used to represent the left peak while 1 is used to represent the right peak.
+
+```{r}
+par(mfrow = c(5, 3), mai = c(0.1, 0.6, 0.1, 0.1))
+
+for (col_name in colnames(dplyr::select_if(insurance_train_data, is.numeric))){
+  boxplot(insurance_train_data[[col_name]],
+          insurance_train_data$TARGET_FLAG,
+          ylab = col_name)
+}
+```
+*Figure XX: Boxplots for the continuous variables*
+
+```{r}
+boxplot(insurance_train_data[[col_name]],
+        insurance_train_data$TARGET_FLAG,
+        ylab = col_name)
+```
+
+### Examining Feature Multicollinearity
+
+Finally, it is imperative to understand which features are correlated with each other in order to address and avoid multicollinearity within our models. By using a correlation plot, we can visualize the relationships between certain features. The correlation plot is only able to determine the correlation for continuous variables. There are methodologies to determine correlations for categorical variables (tetrachoric correlation). However there is only one binary predictor variable which is why the multicollinearity will only be considered for the continuous variables.
+
+
+```{r}
+corrplot(cor(dplyr::select_if(insurance_train_data, is.numeric), use = "na.or.complete"),
+         method = 'number',
+         type = 'lower',
+         diag = FALSE,
+         number.cex = 0.75,
+         tl.cex = 0.5)
+```
+*Figure xx: Multicollinearity plot for continuous predictor variables*
+
+The figure above shows that there isn't much multicollinearity between the variables. There is a moderately positive correlation of 0.58 between `INCOME` and `HOME_VAL`, but with that being said, we decided to just leave these two variables inside the dataset.
+
+### NA exploration
+
+As can be seen below, some of the columns have missing values. Contextually, this can be possible because not every metric must have a value- for example it is possible that an entire season can be played without a batter being hit by the pitch. However it is less likely that an entire season can be played without any strikeouts by batters. We did some research and came up with ways to address each of these issues- more on that later. 
+
+```{r echo = FALSE}
+train  %>%
+  summarise_all(list(~is.na(.)))%>%
+  pivot_longer(everything(),
+               names_to = "variables", values_to="missing") %>%
+  count(variables, missing) %>%
+  ggplot(aes(y=variables,x=n,fill=missing))+
+  geom_col()+
+  scale_fill_manual(values=c("skyblue3","gold"))+
+  theme(axis.title.y=element_blank()) + theme_classic()
+
+```
+*Figure xx: Barplot of number of missing values for each predictor.*
