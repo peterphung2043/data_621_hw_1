@@ -15,6 +15,7 @@ library(reshape2)
 library(mice)
 library(car)
 library(mixtools)
+library(caTools)
 ```
 
 ```{r}
@@ -67,7 +68,7 @@ insurance_eval_data <- insurance_eval_data %>%
     CLM_FREQ = as.integer(CLM_FREQ),
     MVR_PTS = as.integer(MVR_PTS))
 
-original_train <- insurance_train_data
+original_train_data <- insurance_train_data
 ```
 
 # Problem Statement and Goals
@@ -303,3 +304,132 @@ cat(tabl) # output the table in a format good for HTML/PDF/docx conversion
 ```
 *Table 2: $\lambda$'s for skewed variables.*
 
+# Split Data Into Testing and Training
+
+The data was into testing and training subsets such that 60% of it will be used to train, and 40% to test. The first row shows the split for the testing data while the second row shows the split for the training data.
+
+```{r }
+set.seed(123)
+original_split <- sample.split(original_train_data$TARGET_FLAG, SplitRatio = 0.8)
+original_train <-  subset(original_train_data, original_split == TRUE)
+original_test <- subset(original_train_data, original_split == FALSE)
+
+table(original_test$TARGET_FLAG)
+table(original_train$TARGET_FLAG)
+
+modified_split <- sample.split(insurance_train_data$TARGET_FLAG, SplitRatio = 0.8)
+modified_train <-  subset(insurance_train_data, modified_split == TRUE)
+modified_test <- subset(insurance_train_data, modified_split == FALSE)
+
+```
+
+# Build Models
+```{r accuracy_function, results = FALSE}
+
+# Accuracy Function
+accuracy <- function(true_values, predictions){
+  TP <- sum(true_values == 1 & predictions == 1)
+  TN <- sum(true_values == 0 & predictions == 0)
+  round((TP + TN)/length(true_values), 4)
+}
+```
+
+```{r error_function, results = FALSE}
+
+## Classification error rate function
+error <- function(true_values, predictions){
+  FP <- sum(true_values == 0 & predictions == 1)
+  FN <- sum(true_values == 1 & predictions == 0)
+  round((FP + FN)/length(true_values), 4)
+}
+```
+
+```{r fscore_function, results = FALSE}
+
+## F-score function
+fscore <- function(precision_score, recall_score) {
+  (2* precision_score * recall_score)/(precision_score + recall_score)
+}
+```
+
+```{r precision_function, results = FALSE}
+
+## Precision function
+##The precision contains 2 values corresponding to the classes 0, and 1. 
+##In binary classification tasks, we will look at the values of the 
+##positive class (1) for reporting metrics.
+precision <- function(true_values, predictions){
+  TP <- sum(true_values == 1 & predictions == 1)
+  FP <- sum(true_values == 0 & predictions == 1)
+  
+  round(TP/(TP+FP), 4)
+}
+```
+
+```{r recall_function, results = FALSE}
+
+## Sensitivity function
+##The sensitivity/recall contains 2 values corresponding to the classes 0, and 1. 
+##In binary classification tasks, we will look at the values of the positive 
+##class (1) for reporting metrics.
+recall <- function(true_values, predictions){
+  TP <- sum(true_values == 1 & predictions == 1)
+  FN <- sum(true_values == 1 & predictions == 0)
+  
+  round(TP/(TP+FN), 4)
+}
+```
+
+```{r}
+
+## ROC function for step 10
+ROC <- function(x, y){
+  x <- x[order(y, decreasing = TRUE)]
+  TPR <- cumsum(x) / sum(x)
+  FPR <- cumsum(!x) / sum(!x)
+  df <- data.frame(TPR, FPR, x)
+  
+  FPR_df <- c(diff(df$FPR), 0)
+  TPR_df <- c(diff(df$TPR), 0)
+  area_under_curve <- sum(df$TPR * FPR_df) + sum(TPR_df * FPR_df)/2
+  
+  plot(df$FPR, df$TPR, type = "l",
+       main = "ROC ",
+       xlab = "FPR",
+       ylab = "TPR")
+  abline(a = 0, b = 1)
+  legend("center", legend= c("AUC", round(area_under_curve, 4)))
+  
+}
+```
+
+
+```{r, message = FALSE, echo = FALSE}
+#create data frame with 0 rows and 3 columns
+tracker <- data.frame(matrix(ncol = 8, nrow = 0))
+
+#provide column names
+colnames(tracker) <- c("Model", "Precision", "Recall", "AIC", "AUC", "F-score", "Accuracy", "Error")
+
+#create function to update the tracker
+update_tracker <- function(tracker, model_name, true_values, predictions, model_object, df){
+  accuracy = accuracy(true_values, predictions)
+  error = error(true_values, predictions)
+  recall = recall(true_values, predictions)
+  precision = precision(true_values, predictions)
+  aic = model_object$aic
+  auc = as.numeric(str_extract(roc(true_values,  predict(model_object, df, interval = "prediction"))$auc, regex("\\d\\.\\d*")))
+  f_score = fscore(precision, recall)
+  
+  
+  tracker[nrow(tracker) + 1,] <- c(model_name, round(precision, 2), round(recall, 2), round(aic, 2), round(auc, 2), round(f_score, 3), round(accuracy, 2), round(error, 2))
+  return(tracker)
+}
+```
+
+### Binary Logistic Regression Model with Original Variables
+
+```{r}
+logit_original_vars <- glm(formula = TARGET_FLAG ~ . - TARGET_AMT, data = original_train, family = "binomial" (link="logit"))
+summary(logit_original_vars)
+```

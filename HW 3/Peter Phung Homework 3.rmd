@@ -266,7 +266,7 @@ original_test <- subset(crime_training_original, original_split == FALSE)
 table(original_test$target)
 table(original_train$target)
 
-modified_split <- sample.split(crime_training_modified$target, SplitRatio = 0.2)
+modified_split <- sample.split(crime_training_modified$target, SplitRatio = 0.8)
 modified_train <-  subset(crime_training_modified, modified_split == TRUE)
 modified_test <- subset(crime_training_modified, modified_split == FALSE)
 
