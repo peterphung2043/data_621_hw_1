@@ -16,6 +16,19 @@ library(mice)
 library(car)
 library(mixtools)
 library(caTools)
+library(RCurl)
+library(dplyr)
+library(reshape)
+library(GGally)
+library(MASS)
+library(magrittr)
+library(regclass)
+library(kableExtra)
+library(caTools)
+library(PRROC)
+library(pROC)
+library(kableExtra)
+library(stringr)
 ```
 
 ```{r}
@@ -25,7 +38,7 @@ insurance_eval_data <- read.csv("insurance-evaluation-data.csv")
 
 ```{r}
 insurance_train_data <- insurance_train_data %>%
-  select(-INDEX) %>%
+  dplyr::select(-INDEX) %>%
     mutate(
     INCOME = as.numeric(gsub("\\D", "", INCOME)),
     HOME_VAL = as.numeric(gsub("\\D", "", HOME_VAL)),
@@ -47,7 +60,7 @@ insurance_train_data <- insurance_train_data %>%
     MVR_PTS = as.integer(MVR_PTS))
 
 insurance_eval_data <- insurance_eval_data %>%
-  select(-INDEX) %>%
+  dplyr::select(-INDEX) %>%
     mutate(
     INCOME = as.numeric(gsub("\\D", "", INCOME)),
     HOME_VAL = as.numeric(gsub("\\D", "", HOME_VAL)),
@@ -218,10 +231,10 @@ The blue lines for each of the graphs above represent the distributions the non-
 
 ### Feature Manipulation based on Multicollinearity Plot
 
-There is a significant amount of observations for `INCOME` with a value of 0. Therefore, we reasoned that we could create a new dummy variable based on the `INCOME`, where 0 was unemployed and any positive value for income would be employed. Then, we could effectively be rid of the `INCOME` variable while still having some sort of distinction that represents this variable that does not have a high correlation with any of the other variables.
+There is a significant amount of observations for `INCOME` with a value of 0. Therefore, we reasoned that we could create a new dummy variable based on the `INCOME`, called `EMPLOYMENT`, where 0 was unemployed and any positive value for income would be employed. Then, we could effectively be rid of the `INCOME` variable while still having some sort of distinction that represents this variable that does not have a high correlation with any of the other variables.
 
 ```{r}
-insurance_train_data$EMPLOYMENT <- ifelse(insurance_train_data$INCOME > 0, 1, 0)
+insurance_train_data$EMPLOYMENT <- factor(ifelse(insurance_train_data$INCOME > 0, 1, 0))
 insurance_train_data <- insurance_train_data %>% dplyr::select(-INCOME)
 ```
 
@@ -258,10 +271,6 @@ insurance_eval_data <- append_bimodal_dummy_var(0, "KIDSDRIV", insurance_eval_da
 insurance_eval_data <- append_bimodal_dummy_var(0, "YOJ", insurance_eval_data)
 ```
 
-```{r}
-summary(insurance_train_data)
-```
-
 ### Box-Cox Transformation for Skewed Variables
 
 Based on the previous distribution plot (using histograms) we noticed that a select group of columns exhibited non-normal skew. In order to address this skewness and attempt to normalize these features for future modeling, we will employ box-cox transformations. Because some of these values include 0, we will need to replace any zero values with infintesimmaly small, non-zero values.
@@ -286,7 +295,7 @@ as.data.frame(transformed_data) %>%
 *Figure 9: Histograms for transformed variables.*
 
 ```{r, warning = FALSE, message = FALSE, echo = FALSE}
- lambdas <- powerTransform(eval(parse(text = paste("cbind(",toString(skewed_vars),")", "~ 1"))), insurance_eval_data)
+lambdas <- powerTransform(eval(parse(text = paste("cbind(",toString(skewed_vars),")", "~ 1"))), insurance_eval_data)
 transformed_data <- bcPower(lambdas$y, coef(lambdas))
 colnames(transformed_data) <- sprintf("tf_%s", skewed_vars)
 insurance_eval_data <- cbind(insurance_eval_data, transformed_data)
@@ -304,15 +313,15 @@ cat(tabl) # output the table in a format good for HTML/PDF/docx conversion
 ```
 *Table 2: $\lambda$'s for skewed variables.*
 
-# Split Data Into Testing and Training
+### Split Data Into Testing and Training
 
 The data was into testing and training subsets such that 60% of it will be used to train, and 40% to test. The first row shows the split for the testing data while the second row shows the split for the training data.
 
 ```{r }
 set.seed(123)
-original_split <- sample.split(original_train_data$TARGET_FLAG, SplitRatio = 0.8)
-original_train <-  subset(original_train_data, original_split == TRUE)
-original_test <- subset(original_train_data, original_split == FALSE)
+original_split <- sample.split(insurance_train_data$TARGET_FLAG, SplitRatio = 0.8)
+original_train <-  subset(insurance_train_data, original_split == TRUE)
+original_test <- subset(insurance_train_data, original_split == FALSE)
 
 table(original_test$TARGET_FLAG)
 table(original_train$TARGET_FLAG)
@@ -430,6 +439,46 @@ update_tracker <- function(tracker, model_name, true_values, predictions, model_
 ### Binary Logistic Regression Model with Original Variables
 
 ```{r}
-logit_original_vars <- glm(formula = TARGET_FLAG ~ . - TARGET_AMT, data = original_train, family = "binomial" (link="logit"))
+original_test_no_target_amt <- original_test %>% dplyr::select(-TARGET_AMT)
+original_train_no_target_amt <- original_train %>% dplyr::select(-TARGET_AMT)
+```
+
+```{r}
+logit_original_vars <- glm(formula = TARGET_FLAG ~ ., data = original_train_no_target_amt, family = "binomial" (link="logit"))
 summary(logit_original_vars)
+
+logit_original_vars_predictions <- predict.glm(logit_original_vars, original_test_no_target_amt, type = "response")
+logit_original_vars_predictions_binary <- ifelse(logit_original_vars_predictions > 0.5, 1, 0)
+
+tracker <- update_tracker(tracker, "Simple Log Reg", original_test$TARGET_FLAG, logit_original_vars_predictions_binary, logit_original_vars, original_test_no_target_amt)
+```
+
+### Step-AIC Binary Logistic Regression Model
+
+```{r}
+step_aic_logit_model <- stepAIC(logit_original_vars, direction = "both", trace = FALSE)
+summary(step_aic_logit_model)
+
+step_aic_logit_model_predictions <- predict.glm(step_aic_logit_model, original_test_no_target_amt, type = "response")
+step_aic_logit_model_predictions_binary <- ifelse(step_aic_logit_model_predictions > 0.5, 1, 0)
+
+tracker <- update_tracker(tracker, "Step AIC Log Reg", original_test$TARGET_FLAG, step_aic_logit_model_predictions_binary, step_aic_logit_model, original_test_no_target_amt)
+```
+
+
+## Multiple Linear Regression Model with Original Variables
+
+```{r}
+lin_reg_original_vars <- lm(formula = TARGET_AMT ~ . - TARGET_FLAG, data = original_train)
+
+summary(lin_reg_original_vars)
+```
+
+### Step-AIC Multiple Linear Regression Model
+
+```{r}
+step_aic_lin_reg_original_vars <- stepAIC(lin_reg_original_vars, direction = "both", trace = FALSE)
+summary(step_aic_lin_reg_original_vars)
+
+step_aic_lin_reg_original_vars_predictions <- predict.glm(step_aic_lin_reg_original_vars, original_test, type = "response")
 ```
