@@ -7,10 +7,14 @@ date: "2022-11-16"
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = FALSE, comment = NA, warning = FALSE)
 library(tidyverse)
 library(ggplot2)
 library(corrplot)
+library(reshape2)
+library(mice)
+library(car)
+library(mixtools)
 ```
 
 ```{r}
@@ -52,7 +56,7 @@ insurance_eval_data <- insurance_eval_data %>%
     SEX = as.factor(str_remove(SEX, "^z_")),
     EDUCATION = as.factor(str_remove(EDUCATION, "^z_")),
     JOB = as.factor(str_remove(JOB, "^z_")),
-    CAR_TYPE = as.factor(str_remove(CAR_TYPE, "^z_")),
+    CAR_TYPE = as.factor(str_remove(CAR_TYPE, "^z_") ),
     URBANICITY = as.factor(str_remove(URBANICITY, "^z_")),
     PARENT1 = as.factor(PARENT1),
     CAR_USE = as.factor(CAR_USE),
@@ -62,6 +66,8 @@ insurance_eval_data <- insurance_eval_data %>%
     KIDSDRIV = as.integer(KIDSDRIV),
     CLM_FREQ = as.integer(CLM_FREQ),
     MVR_PTS = as.integer(MVR_PTS))
+
+original_train <- insurance_train_data
 ```
 
 # Problem Statement and Goals
@@ -119,28 +125,24 @@ insurance_train_data %>% dplyr::select(-TARGET_FLAG, -TARGET_AMT) %>%
   gather() %>% 
   ggplot(aes(value)) +
     facet_wrap(~ key, scales = "free") +
-    geom_density()
+    geom_density(col = 'red') +
+    geom_histogram(aes(y = stat(density)))
+
 ```
 *Figure XX: Histograms for all of the variables.*
 
-The density plots above show that `BLUEBOOK`, `INCOME`, `KIDSDRIV`, `MVR_PTS`, `OLDCLAIM`, `TIF` and `TRAVTIME` could be transformed in order to fit the normal distribution assumption of a linear regression model. We also create new variables; `bi_CAR_AGE` and `bi_HOME_VAL`. The original variables have a bimodal distribution, so 0 is used to represent the left peak while 1 is used to represent the right peak.
+The density plots above show that `BLUEBOOK`, `INCOME`, and `TRAVTIME` could be transformed in order to fit the normal distribution assumption of a linear regression model. The variables with a bimodal distribution were dealt with and an explanation of the process is provided in the "Dealing with Bimodal Variables" section.
 
-```{r}
-par(mfrow = c(5, 3), mai = c(0.1, 0.6, 0.1, 0.1))
 
-for (col_name in colnames(dplyr::select_if(insurance_train_data, is.numeric))){
-  boxplot(insurance_train_data[[col_name]],
-          insurance_train_data$TARGET_FLAG,
-          ylab = col_name)
-}
+```{r message = FALSE, echo = FALSE, warning = FALSE, results = 'hide', fig.keep='all'}
+melt(insurance_train_data %>% dplyr::select(-TARGET_AMT)) %>%
+  ggplot(aes(x = TARGET_FLAG, y = value, fill = TARGET_FLAG)) +
+  geom_boxplot() +
+  facet_wrap(variable~., scales = "free")
 ```
-*Figure XX: Boxplots for the continuous variables*
+*Figure XX: Boxplots for the dataset*
 
-```{r}
-boxplot(insurance_train_data[[col_name]],
-        insurance_train_data$TARGET_FLAG,
-        ylab = col_name)
-```
+We can see some findings that support the theoretical effects for some of the variables using the boxplots in Figure xx. It seems that younger cars are more likely to get into crashes as opposed to older cars as shown in the `CAR_AGE` boxplot. The theoretical effect of the `CLM_FREQ` (The more claims you filed in the past, the more you are likely to file in the future) is supported by the `CLM_FREQ` boxplot. The theoretical effect of `MVR_PTS` (If you get lots of traffic tickets, you tend to get into more crashes) is supported by the `MVR_PTS` boxplot. It would also seem that the theoretical effects of `INCOME` and `TIF` are also supported by the data. 
 
 ### Examining Feature Multicollinearity
 
@@ -157,14 +159,14 @@ corrplot(cor(dplyr::select_if(insurance_train_data, is.numeric), use = "na.or.co
 ```
 *Figure xx: Multicollinearity plot for continuous predictor variables*
 
-The figure above shows that there isn't much multicollinearity between the variables. There is a moderately positive correlation of 0.58 between `INCOME` and `HOME_VAL`, but with that being said, we decided to just leave these two variables inside the dataset.
+The figure above shows that there isn't much multicollinearity between the variables. There is a moderately positive correlation of 0.58 between `INCOME` and `HOME_VAL`. 
 
 ### NA exploration
 
 As can be seen below, some of the columns have missing values. Contextually, this can be possible because not every metric must have a value- for example it is possible that an entire season can be played without a batter being hit by the pitch. However it is less likely that an entire season can be played without any strikeouts by batters. We did some research and came up with ways to address each of these issues- more on that later. 
 
 ```{r echo = FALSE}
-train  %>%
+insurance_train_data  %>%
   summarise_all(list(~is.na(.)))%>%
   pivot_longer(everything(),
                names_to = "variables", values_to="missing") %>%
@@ -176,3 +178,128 @@ train  %>%
 
 ```
 *Figure xx: Barplot of number of missing values for each predictor.*
+
+
+The barplot above shows that `YOJ`, `INCOME`, `HOME_VAL`, `AGE`, and `CAR_AGE` were missing some data values. However, the amount of missing data for each variable is less than 10%. Therefore, imputing can be done on the missing data.
+
+# Data Preparation
+
+### Dealing with Missing Values
+
+In general, imputations by the means/medians is acceptable if the missing values only account for 5% of the sample. Peng et al.(2006) However, should the degree of missing values exceed 20% then using these simple imputation approaches will result in an artificial reduction in variability due to the fact that values are being imputed at the center of the variable's distribution.
+
+Our team decided to employ another technique to handle the missing values: Multiple Regression Imputation using the MICE package.
+
+The MICE package in R implements a methodology where each incomplete variable is imputed by a separate model. [Alice](https://datascienceplus.com/imputing-missing-data-with-r-mice-package/) points out that plausible values are drawn from a distribution specifically designed for each missing datapoint. Many imputation methods can be used within the package. The one that was selected for the data being analyzed in this report is PMM (Predictive Mean Matching), which is used for quantitative data. 
+
+[Van Buuren](https://stefvanbuuren.name/fimd/sec-pmm.html) explains that PMM works by selecting values from the observed/already existing data that would most likely belong to the variable in the observation with the missing value. The advantage of this is that it selects values that must exist from the observed data, so no negative values will be used to impute missing data.Not only that, it circumvents the shrinking of errors by using multiple regression models. The variability between the different imputed values gives a wider, but more correct standard error. Uncertainty is inherent in imputation which is why having multiple imputed values is important. Not only that. [Marshall et al. 2010](https://stefvanbuuren.name/fimd/sec-pmm.html) points out that:
+
+"Another simulation study that addressed skewed data concluded that predictive mean matching 'may be the preferred approach provided that less than 50% of the cases have missing data...'
+
+
+
+```{r Imputing the missing data from MICE, include = FALSE}
+temp_train <- mice(insurance_train_data,m=4,maxit=5,meth='pmm',seed=500)
+temp_eval <- mice(insurance_eval_data,m=4,maxit=5,meth='pmm',seed=500)
+```
+
+```{r, echo = FALSE}
+insurance_train_data <- mice::complete(temp_train,1)
+insurance_eval_data <- mice::complete(temp_eval,1)
+```
+
+```{r, echo = FALSE}
+mice::densityplot(temp_train)
+```
+*Figure xx: Density plots for variables containing missing data. The number of multiple imputations was set to 4. Each of the red lines represents the distribution for each imputation.*
+
+The blue lines for each of the graphs above represent the distributions the non-missing data for each of the variables while the red lines represent the distributions for the imputed data. Note that the distributions for the imputed data for each of the iterations closely matches the distributions for the non-missing data, which is ideal. If the distributions did not match so well, than another imputing method would have had to have been used.
+
+### Feature Manipulation based on Multicollinearity Plot
+
+There is a significant amount of observations for `INCOME` with a value of 0. Therefore, we reasoned that we could create a new dummy variable based on the `INCOME`, where 0 was unemployed and any positive value for income would be employed. Then, we could effectively be rid of the `INCOME` variable while still having some sort of distinction that represents this variable that does not have a high correlation with any of the other variables.
+
+```{r}
+insurance_train_data$EMPLOYMENT <- ifelse(insurance_train_data$INCOME > 0, 1, 0)
+insurance_train_data <- insurance_train_data %>% dplyr::select(-INCOME)
+```
+
+### Dealing with Bimodal Variables
+
+Bimodal distributions in data are interesting, in that they represent features which actually contain multiple (2) inherent systems resulting in separated distributional peaks. While a Box-Cox transformation could have been undertaken in order to transform the bimodal variables to a normal distribution. However, this throws away important information that is inherent in the bimodal variable itself. The fact that the variable is bimodal in the first place is essentially ignored, and the predicted values in the linear multiple regression model will not reflect this bimodality. 
+
+For variables that displayed bimodality, new variables were created; `bi_CAR_AGE`, `bi_CLM_FREQ`, `bi_HOME_VAL`, `bi_KIDSDRIV`, `bi_YOJ`. For many of these variables, there are a significant number of 0 values, which results in the bimodal distributions shown above, so 0 will represent observations with a value of 0 and 1 will represent any observations with a value greater than 0. For `CAR_AGE`, many cars are 1 years old, so 0 represents observations where the `CAR_AGE` is 1, while 1 represents any observations with a value greater than 1.
+
+```{r, message = FALSE, echo = FALSE}
+# Creates a dummy variable where any values for df[,bimodal_var] below `cutoff`
+# are given a 1, and any values above are given a 0. Since these are dummy
+# variables, they are converted from `numeric` to `factor`s using the `factor`
+# function.
+append_bimodal_dummy_var <- function(cutoff, bimodal_var, df){
+  df[,paste("bi", bimodal_var, sep = "_")] <- factor(ifelse(df[,bimodal_var] > cutoff, 1, 0))
+  return(df)
+}
+
+```
+
+
+```{r}
+insurance_train_data <- append_bimodal_dummy_var(1, "CAR_AGE", insurance_train_data)
+insurance_train_data <- append_bimodal_dummy_var(0, "CLM_FREQ", insurance_train_data)
+insurance_train_data <- append_bimodal_dummy_var(0, "HOME_VAL", insurance_train_data)
+insurance_train_data <- append_bimodal_dummy_var(0, "KIDSDRIV", insurance_train_data)
+insurance_train_data <- append_bimodal_dummy_var(0, "YOJ", insurance_train_data)
+
+insurance_eval_data <- append_bimodal_dummy_var(1, "CAR_AGE", insurance_eval_data)
+insurance_eval_data <- append_bimodal_dummy_var(0, "CLM_FREQ", insurance_eval_data)
+insurance_eval_data <- append_bimodal_dummy_var(0, "HOME_VAL", insurance_eval_data)
+insurance_eval_data <- append_bimodal_dummy_var(0, "KIDSDRIV", insurance_eval_data)
+insurance_eval_data <- append_bimodal_dummy_var(0, "YOJ", insurance_eval_data)
+```
+
+```{r}
+summary(insurance_train_data)
+```
+
+### Box-Cox Transformation for Skewed Variables
+
+Based on the previous distribution plot (using histograms) we noticed that a select group of columns exhibited non-normal skew. In order to address this skewness and attempt to normalize these features for future modeling, we will employ box-cox transformations. Because some of these values include 0, we will need to replace any zero values with infintesimmaly small, non-zero values.
+
+The $\lambda$'s that were used to transform the skewed variables are shown on Table 2.
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+skewed_vars <-   c("BLUEBOOK", "TRAVTIME")
+lambdas <- powerTransform(eval(parse(text = paste("cbind(",toString(skewed_vars),")", "~ 1"))), insurance_train_data)
+transformed_data <- bcPower(lambdas$y, coef(lambdas))
+colnames(transformed_data) <- sprintf("tf_%s", skewed_vars)
+insurance_train_data <- cbind(insurance_train_data, transformed_data)
+```
+
+```{r warning = FALSE, message = FALSE, echo = FALSE, results = 'hide', fig.keep='all'}
+as.data.frame(transformed_data) %>%
+  keep(is.numeric) %>% 
+  gather() %>% 
+  ggplot(aes(value)) +
+    facet_wrap(~ key, scales = "free") +
+    geom_histogram(bins = 35)
+```
+*Figure 9: Histograms for transformed variables.*
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+ lambdas <- powerTransform(eval(parse(text = paste("cbind(",toString(skewed_vars),")", "~ 1"))), insurance_eval_data)
+transformed_data <- bcPower(lambdas$y, coef(lambdas))
+colnames(transformed_data) <- sprintf("tf_%s", skewed_vars)
+insurance_eval_data <- cbind(insurance_eval_data, transformed_data)
+```
+
+```{r tablexxx, echo=FALSE, message=FALSE, warnings=FALSE, results='asis'}
+tabl <- "
+|Column Name|$\\lambda$|
+|---------------|-------------:|
+|BLUEBOOK|0.461|
+|TRAVTIME|0.687|
+
+"
+cat(tabl) # output the table in a format good for HTML/PDF/docx conversion
+```
+*Table 2: $\lambda$'s for skewed variables.*
+

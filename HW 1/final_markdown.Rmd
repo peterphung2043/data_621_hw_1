@@ -486,7 +486,7 @@ create_bimodal_cutoff <- function(bimodal_var, df){
 # variables, they are converted from `numeric` to `factor`s using the `factor`
 # function.
 append_bimodal_dummy_var <- function(cutoff, bimodal_var, df){
-  df[,paste("bi", bimodal_var, sep = "_")] <- (df[,bimodal_var] < cutoff) * 1
+  df[,paste("bi", bimodal_var, sep = "_")] <- factor((df[,bimodal_var] < cutoff) * 1)
   return(df)
 }
 
