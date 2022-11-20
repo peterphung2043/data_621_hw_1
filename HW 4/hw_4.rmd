@@ -29,6 +29,7 @@ library(PRROC)
 library(pROC)
 library(kableExtra)
 library(stringr)
+library(Metrics)
 ```
 
 ```{r}
@@ -125,6 +126,7 @@ tabl <- "
 "
 cat(tabl) # output the table in a format good for HTML/PDF/docx conversion
 ```
+*Table 1: Variables in the dataset*
 
 A summary of the variables is shown below. The `INDEX` variable has been removed. The summary below reveals that `AGE`, `VOJ`, `INCOME`, `HOME_VAL`, and `CAR_AGE` have missing values.
 
@@ -143,7 +145,7 @@ insurance_train_data %>% dplyr::select(-TARGET_FLAG, -TARGET_AMT) %>%
     geom_histogram(aes(y = stat(density)))
 
 ```
-*Figure XX: Histograms for all of the variables.*
+*Figure 1: Histograms for all of the variables.*
 
 The density plots above show that `BLUEBOOK`, `INCOME`, and `TRAVTIME` could be transformed in order to fit the normal distribution assumption of a linear regression model. The variables with a bimodal distribution were dealt with and an explanation of the process is provided in the "Dealing with Bimodal Variables" section.
 
@@ -154,9 +156,9 @@ melt(insurance_train_data %>% dplyr::select(-TARGET_AMT)) %>%
   geom_boxplot() +
   facet_wrap(variable~., scales = "free")
 ```
-*Figure XX: Boxplots for the dataset*
+*Figure 2: Boxplots for the dataset*
 
-We can see some findings that support the theoretical effects for some of the variables using the boxplots in Figure xx. It seems that younger cars are more likely to get into crashes as opposed to older cars as shown in the `CAR_AGE` boxplot. The theoretical effect of the `CLM_FREQ` (The more claims you filed in the past, the more you are likely to file in the future) is supported by the `CLM_FREQ` boxplot. The theoretical effect of `MVR_PTS` (If you get lots of traffic tickets, you tend to get into more crashes) is supported by the `MVR_PTS` boxplot. It would also seem that the theoretical effects of `INCOME` and `TIF` are also supported by the data. 
+We can see some findings that support the theoretical effects for some of the variables using the boxplots in Figure 2. It seems that younger cars are more likely to get into crashes as opposed to older cars as shown in the `CAR_AGE` boxplot. The theoretical effect of the `CLM_FREQ` (The more claims you filed in the past, the more you are likely to file in the future) is supported by the `CLM_FREQ` boxplot. The theoretical effect of `MVR_PTS` (If you get lots of traffic tickets, you tend to get into more crashes) is supported by the `MVR_PTS` boxplot. It would also seem that the theoretical effects of `INCOME` and `TIF` are also supported by the data. 
 
 ### Examining Feature Multicollinearity
 
@@ -171,7 +173,7 @@ corrplot(cor(dplyr::select_if(insurance_train_data, is.numeric), use = "na.or.co
          number.cex = 0.75,
          tl.cex = 0.5)
 ```
-*Figure xx: Multicollinearity plot for continuous predictor variables*
+*Figure 3: Multicollinearity plot for continuous predictor variables*
 
 The figure above shows that there isn't much multicollinearity between the variables. There is a moderately positive correlation of 0.58 between `INCOME` and `HOME_VAL`. 
 
@@ -191,7 +193,7 @@ insurance_train_data  %>%
   theme(axis.title.y=element_blank()) + theme_classic()
 
 ```
-*Figure xx: Barplot of number of missing values for each predictor.*
+*Figure 4: Barplot of number of missing values for each predictor.*
 
 
 The barplot above shows that `YOJ`, `INCOME`, `HOME_VAL`, `AGE`, and `CAR_AGE` were missing some data values. However, the amount of missing data for each variable is less than 10%. Therefore, imputing can be done on the missing data.
@@ -225,7 +227,7 @@ insurance_eval_data <- mice::complete(temp_eval,1)
 ```{r, echo = FALSE}
 mice::densityplot(temp_train)
 ```
-*Figure xx: Density plots for variables containing missing data. The number of multiple imputations was set to 4. Each of the red lines represents the distribution for each imputation.*
+*Figure 5: Density plots for variables containing missing data. The number of multiple imputations was set to 4. Each of the red lines represents the distribution for each imputation.*
 
 The blue lines for each of the graphs above represent the distributions the non-missing data for each of the variables while the red lines represent the distributions for the imputed data. Note that the distributions for the imputed data for each of the iterations closely matches the distributions for the non-missing data, which is ideal. If the distributions did not match so well, than another imputing method would have had to have been used.
 
@@ -236,6 +238,9 @@ There is a significant amount of observations for `INCOME` with a value of 0. Th
 ```{r}
 insurance_train_data$EMPLOYMENT <- factor(ifelse(insurance_train_data$INCOME > 0, 1, 0))
 insurance_train_data <- insurance_train_data %>% dplyr::select(-INCOME)
+
+insurance_eval_data$EMPLOYMENT <- factor(ifelse(insurance_eval_data$INCOME > 0, 1, 0))
+insurance_eval_data <- insurance_eval_data %>% dplyr::select(-INCOME)
 ```
 
 ### Dealing with Bimodal Variables
@@ -292,7 +297,7 @@ as.data.frame(transformed_data) %>%
     facet_wrap(~ key, scales = "free") +
     geom_histogram(bins = 35)
 ```
-*Figure 9: Histograms for transformed variables.*
+*Figure 6: Histograms for transformed variables.*
 
 ```{r, warning = FALSE, message = FALSE, echo = FALSE}
 lambdas <- powerTransform(eval(parse(text = paste("cbind(",toString(skewed_vars),")", "~ 1"))), insurance_eval_data)
@@ -325,11 +330,6 @@ original_test <- subset(insurance_train_data, original_split == FALSE)
 
 table(original_test$TARGET_FLAG)
 table(original_train$TARGET_FLAG)
-
-modified_split <- sample.split(insurance_train_data$TARGET_FLAG, SplitRatio = 0.8)
-modified_train <-  subset(insurance_train_data, modified_split == TRUE)
-modified_test <- subset(insurance_train_data, modified_split == FALSE)
-
 ```
 
 # Build Models
@@ -416,9 +416,11 @@ ROC <- function(x, y){
 ```{r, message = FALSE, echo = FALSE}
 #create data frame with 0 rows and 3 columns
 tracker <- data.frame(matrix(ncol = 8, nrow = 0))
+lin_reg_tracker <- data.frame(matrix(ncol = 5, nrow = 0))
 
 #provide column names
 colnames(tracker) <- c("Model", "Precision", "Recall", "AIC", "AUC", "F-score", "Accuracy", "Error")
+colnames(lin_reg_tracker) <- c("Model", "MSE", "R-Squared", "Adjusted R-Squared", "F-Statistic")
 
 #create function to update the tracker
 update_tracker <- function(tracker, model_name, true_values, predictions, model_object, df){
@@ -433,6 +435,16 @@ update_tracker <- function(tracker, model_name, true_values, predictions, model_
   
   tracker[nrow(tracker) + 1,] <- c(model_name, round(precision, 2), round(recall, 2), round(aic, 2), round(auc, 2), round(f_score, 3), round(accuracy, 2), round(error, 2))
   return(tracker)
+}
+
+update_lin_reg_tracker <- function(model_name, actual, predicted, model){
+  calculated_rmse <- Metrics::rmse(actual, predicted) ^ 2
+  r_2 <- summary(model)$r.squared
+  adj_r_2 <- summary(model)$adj.r.squared
+  f_statistic <- summary(model)$fstatistic[1]
+  
+  lin_reg_tracker[nrow(lin_reg_tracker) + 1,] <- c(model_name, round(calculated_rmse, 2), round(r_2, 3), round(adj_r_2, 3), round(f_statistic, 2))
+  return(lin_reg_tracker)
 }
 ```
 
@@ -452,6 +464,14 @@ logit_original_vars_predictions_binary <- ifelse(logit_original_vars_predictions
 
 tracker <- update_tracker(tracker, "Simple Log Reg", original_test$TARGET_FLAG, logit_original_vars_predictions_binary, logit_original_vars, original_test_no_target_amt)
 ```
+### Confusion Matrix for Binary Logistic Regression Model with Original Variables
+
+The confusion matrix for the binary logistic regression model with original variables is provided below.
+
+```{r}
+logit_original_vars_cm <- as.matrix(table(Actual = original_test$TARGET_FLAG, Predicted = logit_original_vars_predictions_binary))
+logit_original_vars_cm
+```
 
 ### Step-AIC Binary Logistic Regression Model
 
@@ -464,21 +484,131 @@ step_aic_logit_model_predictions_binary <- ifelse(step_aic_logit_model_predictio
 
 tracker <- update_tracker(tracker, "Step AIC Log Reg", original_test$TARGET_FLAG, step_aic_logit_model_predictions_binary, step_aic_logit_model, original_test_no_target_amt)
 ```
+### Confusion Matrix for Step-AIC Binary Logistic Regression Model
 
+The confusion matrix for the Step-AIC binary logistic regression model with original variables is provided below.
+
+```{r}
+step_aic_logit_model_cm <- as.matrix(table(Actual = original_test$TARGET_FLAG, Predicted = step_aic_logit_model_predictions_binary))
+step_aic_logit_model_cm
+```
 
 ## Multiple Linear Regression Model with Original Variables
 
 ```{r}
-lin_reg_original_vars <- lm(formula = TARGET_AMT ~ . - TARGET_FLAG, data = original_train)
-
-summary(lin_reg_original_vars)
+original_test_no_target_flag <- original_test %>% dplyr::select(-TARGET_FLAG)
+original_train_no_target_flag <- original_train %>% dplyr::select(-TARGET_FLAG)
 ```
 
+```{r}
+lin_reg_original_vars <- lm(formula = TARGET_AMT ~ ., data = original_train_no_target_flag)
+summary(lin_reg_original_vars)
+
+lin_reg_original_vars_predictions <- predict.lm(lin_reg_original_vars, original_test_no_target_flag, type = "response")
+
+lin_reg_tracker <- update_lin_reg_tracker("Simple Linear", original_test$TARGET_AMT, lin_reg_original_vars_predictions, lin_reg_original_vars)
+```
 ### Step-AIC Multiple Linear Regression Model
 
 ```{r}
 step_aic_lin_reg_original_vars <- stepAIC(lin_reg_original_vars, direction = "both", trace = FALSE)
+
 summary(step_aic_lin_reg_original_vars)
 
-step_aic_lin_reg_original_vars_predictions <- predict.glm(step_aic_lin_reg_original_vars, original_test, type = "response")
+step_aic_lin_reg_original_vars_predictions <- predict.lm(step_aic_lin_reg_original_vars, original_test_no_target_flag, type = "response")
+
+lin_reg_tracker <- update_lin_reg_tracker("Step-AIC Linear", original_test$TARGET_AMT, step_aic_lin_reg_original_vars_predictions, step_aic_lin_reg_original_vars)
+```
+
+### Parsed Step-AIC Multiple Linear Regression Model
+
+In this model, we selected the variables from the original Step-AIC Model that had p-values that were less than 0.05.
+
+```{r}
+parsed_step_aic_lin_reg_original_vars <- lm(formula = TARGET_AMT ~ PARENT1 + MSTATUS + JOB + CAR_USE + TIF + CAR_TYPE + CLM_FREQ + MVR_PTS + CAR_AGE + URBANICITY + bi_KIDSDRIV + tf_TRAVTIME, data = original_train_no_target_flag)
+
+summary(parsed_step_aic_lin_reg_original_vars)
+
+parsed_step_aic_lin_reg_original_vars_predictions <- predict.lm(parsed_step_aic_lin_reg_original_vars, original_test_no_target_flag, type = "response")
+
+lin_reg_tracker <- update_lin_reg_tracker("Parsed Step-AIC Linear", original_test$TARGET_AMT, parsed_step_aic_lin_reg_original_vars_predictions, parsed_step_aic_lin_reg_original_vars)
+```
+
+# Model Selection
+
+### Binary Logistic Regression Models
+
+```{r}
+knitr::kable(tracker)
+```
+*Table 3: Model metrics for binary logistic regression models*
+
+```{r, message = FALSE, echo = FALSE}
+# ggplot(tracker, aes(x=factor(Model, level=c('Simple', 'Transformed', 'Negative Bimodal', 'Reduced Transformed')), y=Precision)) +
+#   geom_bar(stat = "identity") +
+#   ylab("Precision") +
+#   xlab("Model") +
+#   theme(axis.text.x = element_text(angle = 90))
+
+plt <- melt(tracker[,c('Model','Precision','Recall','AUC','F-score','Accuracy','Error')],id.vars = 1)
+
+ggplot(plt, aes(x=factor(Model, level=c("Simple Log Reg", "Step AIC Log Reg")), y = value)) + 
+  geom_bar(aes(fill = variable),stat = "identity",position = "dodge") +
+  xlab("Model") +
+  ylab("Score") +
+  theme(axis.text.x = element_text(angle = 90))
+```
+*Figure 7: Bar chart of metrics for binary logistic regression models*
+
+For this assignment, we will be choosing the Simple Log Reg for our binary logistic regression model. Between the two models, the simple binary logistic regression model has a higher f-score than the Step-AIC Logistic Regression model.
+
+```{r, echo = FALSE, results = 'hide', fig.keep = 'all', message = FALSE}
+plot(roc(original_test$TARGET_FLAG,  predict(logit_original_vars, original_test, interval = "prediction")), print.auc = TRUE)
+```
+*Figure 8: ROC Curve for selected model (Simple Model)*
+
+As we see on Figure 8, our model performs really well with an AUC of 0.822.
+
+### Multiple Linear Regression Models
+
+```{r}
+knitr::kable(lin_reg_tracker)
+```
+*Table 4: Model metrics for multiple linear regression models*
+
+```{r, message = FALSE, echo = FALSE}
+# ggplot(tracker, aes(x=factor(Model, level=c('Simple', 'Transformed', 'Negative Bimodal', 'Reduced Transformed')), y=Precision)) +
+#   geom_bar(stat = "identity") +
+#   ylab("Precision") +
+#   xlab("Model") +
+#   theme(axis.text.x = element_text(angle = 90))
+
+plt <- melt(lin_reg_tracker[,c('Model','MSE', 'R-Squared', 'Adjusted R-Squared', 'F-Statistic')],id.vars = 1)
+
+ggplot(plt, aes(x=factor(Model, level=c("Simple Linear", "Step-AIC Linear", "Parsed Step-AIC Linear")), y = value)) + 
+  geom_bar(aes(fill = variable),stat = "identity",position = "dodge") +
+  xlab("Model") +
+  ylab("Score") +
+  theme(axis.text.x = element_text(angle = 90))
+```
+*Figure 9: Metrics bar chart for multiple linear regression models*
+
+For this assignment, we will be choosing the Step-AIC Linear model for our multiple linear regression model. Between the three models, the multiple linear regression model has the highest adjusted R-squared and the lowest MSE.
+
+```{r}
+par(mfrow = c(2, 2))
+plot(step_aic_lin_reg_original_vars)
+```
+*Figure 10: Residual Plots for Step-AIC Linear Model*
+
+```{r}
+eval_predictions <- predict.glm(logit_original_vars, insurance_eval_data %>% dplyr::select(-TARGET_AMT), type = "response")
+eval_predictions_binary <- ifelse(eval_predictions > 0.5, 1, 0)
+```
+
+```{r}
+eval_pred_df <- data.frame(eval_predictions, eval_predictions_binary)
+colnames(eval_pred_df) <- c("Probabilities", "Classifications")
+
+write.csv(eval_pred_df, file = "probabilities_classifications.csv")
 ```
