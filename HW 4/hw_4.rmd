@@ -3,6 +3,7 @@ title: "DATA 621 - Homework 4"
 output:
   pdf_document: default
   html_document: default
+author: "Coffy Andrews-Guo, Krutika Patel, Alec McCabe, Ahmed Elsaeyed, Peter Phung"
 date: "2022-11-16"
 ---
 
