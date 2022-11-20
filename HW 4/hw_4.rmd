@@ -602,13 +602,15 @@ plot(step_aic_lin_reg_original_vars)
 *Figure 10: Residual Plots for Step-AIC Linear Model*
 
 ```{r}
-eval_predictions <- predict.glm(logit_original_vars, insurance_eval_data %>% dplyr::select(-TARGET_AMT), type = "response")
-eval_predictions_binary <- ifelse(eval_predictions > 0.5, 1, 0)
+eval_predictions_log_reg <- predict.glm(logit_original_vars, insurance_eval_data %>% dplyr::select(-TARGET_AMT), type = "response")
+eval_predictions_log_reg_binary <- ifelse(eval_predictions_log_reg > 0.5, 1, 0)
+
+eval_predictions_lin_reg <- predict.lm(step_aic_lin_reg_original_vars, insurance_eval_data %>% dplyr::select(-TARGET_FLAG), type = "response")
 ```
 
 ```{r}
-eval_pred_df <- data.frame(eval_predictions, eval_predictions_binary)
-colnames(eval_pred_df) <- c("Probabilities", "Classifications")
+eval_pred_df <- data.frame(eval_predictions_log_reg, eval_predictions_log_reg_binary, eval_predictions_lin_reg)
+colnames(eval_pred_df) <- c("Probabilities", "Classifications", "Cost")
 
-write.csv(eval_pred_df, file = "probabilities_classifications.csv")
+write.csv(eval_pred_df, file = "probabilities_classifications_cost.csv")
 ```
