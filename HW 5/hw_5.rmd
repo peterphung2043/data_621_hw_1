@@ -63,11 +63,11 @@ wine_eval <- wine_eval %>%
 
 In this report, we generate a count regression model that is able to predict the number of cases of wine that will be sold given certain properties of the wine. The independent and dependent variables that are used in order to generate this model use data from 12,000 commercially available wines. The analysis detailed in this report shows the testing of several models:
 
-- Two different poisson regression models
-- Two different negative binomial regression models
-- Two different multiple linear regression models
+- Four different poisson regression models
+- Four different negative binomial regression models
+- Four different multiple linear regression models
 
-From these models, a best model was selected based on model performance and various metrics. Note that the multiple linear regression models are provided in this analysis for comparison purposes and ultimately a count regression model was selected.
+From these models, a best model was selected based on model performance and various metrics. Note that the multiple linear regression models were provided in this analysis for comparison purposes and ultimately a count regression model was selected for model deployment.
 
 # Data Exploration
 
