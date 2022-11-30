@@ -180,7 +180,7 @@ The figure above shows that there isn't much multicollinearity between the varia
 
 ### NA exploration
 
-As can be seen below, some of the columns have missing values. Contextually, this can be possible because not every metric must have a value- for example it is possible that an entire season can be played without a batter being hit by the pitch. However it is less likely that an entire season can be played without any strikeouts by batters. We did some research and came up with ways to address each of these issues- more on that later. 
+As can be seen below, some of the columns have missing values.
 
 ```{r echo = FALSE}
 insurance_train_data  %>%

@@ -1,0 +1,550 @@
+---
+title: "DATA 621 - Homework 5"
+output:
+  pdf_document: default
+  html_document: default
+author: "Coffy Andrews-Guo, Krutika Patel, Alec McCabe, Ahmed Elsaeyed, Peter Phung"
+date: "2022-11-29"
+---
+
+```{r setup, include=FALSE, echo = FALSE, warning = FALSE, message = FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, comment = NA)
+
+library(tidyverse)
+library(reshape2)
+library(faraway)
+library(ggplot2)
+library(mice)
+library(caTools)
+library(MASS)
+library(corrplot)
+```
+
+```{r importing data}
+wine_train <- read.csv("wine-training-data.csv")
+wine_eval <- read.csv("wine-evaluation-data.csv")
+
+```
+
+```{r, create immutable dataset; then remove nas and generate factors for immutable data}
+wine_train_original <- wine_train
+wine_train_original <- wine_train_original[complete.cases(wine_train_original), ]
+
+wine_train_original <- wine_train_original %>%
+  dplyr::select(-INDEX) %>%
+    dplyr::mutate(
+    TARGET = as.factor(TARGET),
+    LabelAppeal = as.factor(LabelAppeal),
+    STARS = as.factor(STARS)
+    )
+```
+
+
+```{r defining factors and removing index}
+
+wine_train <- wine_train %>%
+  dplyr::select(-INDEX) %>%
+    dplyr::mutate(
+    TARGET = as.factor(TARGET),
+    LabelAppeal = as.factor(LabelAppeal),
+    STARS = as.factor(STARS)
+    )
+
+wine_eval <- wine_eval %>%
+  dplyr::select(-IN, -TARGET) %>%
+    dplyr::mutate(
+    LabelAppeal = as.factor(LabelAppeal),
+    STARS = as.factor(STARS)
+    )
+
+```
+
+# Problem Statement and Goals
+
+In this report, we generate a count regression model that is able to predict the number of cases of wine that will be sold given certain properties of the wine. The independent and dependent variables that are used in order to generate this model use data from 12,000 commercially available wines. The analysis detailed in this report shows the testing of several models:
+
+- Two different poisson regression models
+- Two different negative binomial regression models
+- Two different multiple linear regression models
+
+From these models, a best model was selected based on model performance and various metrics. Note that the multiple linear regression models are provided in this analysis for comparison purposes and ultimately a count regression model was selected.
+
+# Data Exploration
+
+The following is a summary of the variables provided within the data to generate the count regression model.
+
+```{r table1, echo=FALSE, message=FALSE, warnings=FALSE, results='asis'}
+tabl <- "
+|Variable Name|Definition|Theoretical Effect|
+|---------------|-------------|-------------:|
+|INDEX|Identification Variable (do not use)|None|
+|TARGET|Number of Cases Purchased|None|
+|AcidIndex|Proprietary method of testing total acidity of wine by using a weighted average||
+|Alcohol|Alcohol Content||
+|Chlorides|Chloride content of wine||
+|CitricAcid|Citric Acid Content||
+|Density|Density of Wine||
+|FixedAcidity|Fixed Acidity of Wine||
+|FreeSulfurDioxide|Sulfur Dioxide content of wine||
+|LabelAppeal|Marketing Score indicating the appeal of label design for consumers. High numbers suggest customers like the label design. Negative numbers suggest customes don't like the design.|Many consumers purchase based on the visual appeal of the wine label design. Higher numbers suggest better sales.|
+|ResidualSugar|Residual Sugar of wine|
+|STARS|Wine rating by a team of experts. 4 Stars = Excellent, 1 Star = Poor|A high number of stars suggests high sales
+|Sulphates|Sulfate content of wine||
+|TotalSulfurDioxide|Total Sulfur Dioxide of Wine||
+|VolatileAcidity|Volatile Acid content of wine||
+|pH|pH of wine||
+"
+cat(tabl) # output the table in a format good for HTML/PDF/docx conversion
+```
+*Table 1: Variables in the dataset*
+
+A summary of the variables is shown below. The summary itself reveals some interesting characteristics about the data. `Density`, `pH`, `AcidIndex`, `STARS`, and `LabelAppeal` are the only variables where their minimums are not negative, while the rest of the predictor variables are negative. It would also seem that `TARGET`, `LabelAppeal` and `STARS` are discrete variables and were therefore treated as such throughout this report. Note that the summary below shows the `INDEX` variable which was ignored throughout this analysis.
+
+```{r}
+#view data set variables summary statistics
+summary(wine_train)
+```
+
+```{r message = FALSE, echo = FALSE, warning = FALSE, results = 'hide', fig.keep='all'}
+wine_train %>% dplyr::select(-TARGET) %>%
+  keep(is.numeric) %>% 
+  gather() %>% 
+  ggplot(aes(value)) +
+    facet_wrap(~ key, scales = "free") +
+    geom_density(col = 'red') +
+    geom_histogram(aes(y = stat(density)))
+
+```
+*Figure 1: Histograms for all of the variables.*
+
+Figure 1 shows us that the histograms for the continuous predictor variables assume somewhat of a normal distirbution. Therefore, the team reasoned that these variables did not require any transformation.
+
+```{r message = FALSE, echo = FALSE, warning = FALSE, results = 'hide', fig.keep='all'}
+melt(wine_train) %>%
+  ggplot(aes(x = TARGET, y = value, fill = TARGET)) +
+  geom_boxplot() +
+  facet_wrap(variable~., scales = "free")
+```
+*Figure 2: Boxplots for the dataset*
+
+Figure 2 points out that there are way less outliers when 8 cases are purchased compared to the under 8 cases. Figure 2 also shows that the number of outliers decreases as the number of cases increases. It would seem that people tend to buy higher amounts of wine with the following characteristics:
+
+- Fixed acidity is 0
+- Volatile acidity is 0
+- Residual sugar is 0
+- Chlorides is 0
+- Sulfur dioxide content is 0
+- Total sulfur dioxide is 0
+- Density is 1
+- pH is 3 (The optimal pH for wine is about 3.0 to 3.4 ([source](https://www.winespectator.com/articles/what-do-ph-and-ta-numbers-mean-to-a-wine-5035)))
+- Sulphates is 0
+- Alcohol content is 9%
+- The weighted average of the acidity of the wine is ~8 
+
+This indicates that the more higher quality the wine, the more amounts of it that people will purchase. Also, if we look at Figure 3, we can assume that affluent people buy more cases, which is why there is so few purchases of 8 cases of wine. Figure 3 shows us that, many people tend to generally buy a bottle, which is why the count for `0` is significantly high. Ignoring this `0`, we can see that the rest of the graph takes on a normal distribution.
+
+```{r}
+ggplot(wine_train, aes(x = TARGET)) +
+    geom_bar() +
+    xlab("Number of Cases Bought")
+```
+*Figure 3: Bar chart of the number of cases bought.*
+
+### Examining Feature Multicollinearity
+
+Finally, it is imperative to understand which features are correlated with each other in order to address and avoid multicollinearity within our models. By using a correlation plot, we can visualize the relationships between certain features. The correlation plot is only able to determine the correlation for continuous variables. There are methodologies to determine correlations for categorical variables (tetrachoric correlation). However there is only one binary predictor variable which is why the multicollinearity will only be considered for the continuous variables.
+
+```{r}
+corrplot(cor(dplyr::select_if(wine_train, is.numeric), use = "na.or.complete"),
+         method = 'number',
+         type = 'lower',
+         diag = FALSE,
+         col = 'black',
+         number.cex = 0.75,
+         tl.cex = 0.5)
+```
+*Figure 4: Multicollinearity plot for continuous predictor variables*
+
+Figure 4 shows that there isn't much multicollinearity between the continuous variables. In fact the correlations themselves are near 0 for all of the continuous predictor variables. `AcidIndex` has a weak positive correlation with `FixedAcidity` and will therefore be ignored.
+
+
+```{r}
+chi_sq_tracker <- data.frame(matrix(ncol = 2, nrow = 0))
+colnames(chi_sq_tracker) <- c("Variable", "P-Value")
+
+chi_sq_tracker[nrow(chi_sq_tracker) + 1,] <- c("STARS", chisq.test(wine_train$TARGET, wine_train$STARS, correct = F)$p.value)
+chi_sq_tracker[nrow(chi_sq_tracker) + 1,] <- c("AcidIndex", chisq.test(wine_train$TARGET, wine_train$AcidIndex, correct = F)$p.value)
+chi_sq_tracker[nrow(chi_sq_tracker) + 1,] <- c("LabelAppeal", chisq.test(wine_train$TARGET, wine_train$LabelAppeal, correct = F)$p.value)
+
+knitr::kable(chi_sq_tracker)
+
+```
+*Table 2: Chi-Square test p-values for categorical variables against `TARGET` variable.*
+
+We decided to perform Chi-Square tests to determine the correlations between the categorical predictor variables and the `TARGET` variable to see if we can reject the null (they are independent). Table 2 above reveals that all of these variables have a p-value of less than 0.05, which indicates that these variables are correlated with the `TARGET` variable. For `STARS` and `LabelAppeal`, this is to be expected based on the theoretical effects for these variables. We decided to not omit any variables based on these results.
+
+### NA exploration
+
+As can be seen in Figure 5, some of the columns have missing values. These missing values were imputed using the MICE algorithm. The methodology that was used is explained in the "Dealing with Missing Values" section.
+
+```{r echo = FALSE}
+wine_train  %>%
+  summarise_all(list(~is.na(.)))%>%
+  pivot_longer(everything(),
+               names_to = "variables", values_to="missing") %>%
+  count(variables, missing) %>%
+  ggplot(aes(y=variables,x=n,fill=missing))+
+  geom_col()+
+  scale_fill_manual(values=c("skyblue3","gold"))+
+  theme(axis.title.y=element_blank()) + theme_classic()
+
+```
+*Figure 5: Barplot of number of missing values for each predictor.*
+
+# Data Preparation
+
+### Dealing with Missing Values
+
+In general, imputations by the means/medians is acceptable if the missing values only account for 5% of the sample. Peng et al.(2006) However, should the degree of missing values exceed 20% then using these simple imputation approaches will result in an artificial reduction in variability due to the fact that values are being imputed at the center of the variable's distribution.
+
+Our team decided to employ another technique to handle the missing values: Multiple Regression Imputation using the MICE package.
+
+The MICE package in R implements a methodology where each incomplete variable is imputed by a separate model. [Alice](https://datascienceplus.com/imputing-missing-data-with-r-mice-package/) points out that plausible values are drawn from a distribution specifically designed for each missing datapoint. Many imputation methods can be used within the package. The one that was selected for the data being analyzed in this report is PMM (Predictive Mean Matching), which is used for quantitative data. 
+
+[Van Buuren](https://stefvanbuuren.name/fimd/sec-pmm.html) explains that PMM works by selecting values from the observed/already existing data that would most likely belong to the variable in the observation with the missing value. The advantage of this is that it selects values that must exist from the observed data, so no negative values will be used to impute missing data.Not only that, it circumvents the shrinking of errors by using multiple regression models. The variability between the different imputed values gives a wider, but more correct standard error. Uncertainty is inherent in imputation which is why having multiple imputed values is important. Not only that. [Marshall et al. 2010](https://stefvanbuuren.name/fimd/sec-pmm.html) points out that:
+
+"Another simulation study that addressed skewed data concluded that predictive mean matching 'may be the preferred approach provided that less than 50% of the cases have missing data...'
+
+
+
+```{r Imputing the missing data from MICE, include = FALSE}
+temp_train <- mice(wine_train,m=4,maxit=5,meth='pmm',seed=500)
+temp_eval <- mice(wine_eval,m=4,maxit=5,meth='pmm',seed=500)
+```
+
+```{r, echo = FALSE}
+wine_train <- mice::complete(temp_train,1)
+wine_eval <- mice::complete(temp_eval,1)
+```
+
+```{r, echo = FALSE}
+mice::densityplot(temp_train)
+```
+*Figure 6: Density plots for variables containing missing data. The number of multiple imputations was set to 4. Each of the red lines represents the distribution for each imputation.*
+
+The blue lines for each of the graphs in Figure 6 represent the distributions the non-missing data for each of the variables while the red lines represent the distributions for the imputed data. Note that the distributions for the imputed data for each of the iterations closely matches the distributions for the non-missing data, which is ideal. If the distributions did not match so well, than another imputing method would have had to have been used.
+
+### Split Data Into Testing and Training
+
+The data was into testing and training subsets such that 70% of it will be used to train, and 30% to test. The first row shows the split for the testing data while the second row shows the split for the training data. The first two rows are for the original data set, while the last two rows are for the data set with imputed NA values.
+
+```{r }
+set.seed(123)
+
+original_split <- sample.split(wine_train_original$TARGET, SplitRatio = 0.7)
+original_train <-  subset(wine_train_original, original_split == TRUE)
+original_test <- subset(wine_train_original, original_split == FALSE)
+
+modified_split <- sample.split(wine_train$TARGET, SplitRatio = 0.7)
+modified_train <-  subset(wine_train, modified_split == TRUE)
+modified_test <- subset(wine_train, modified_split == FALSE)
+
+table(original_test$TARGET)
+table(original_train$TARGET)
+
+table(modified_test$TARGET)
+table(modified_train$TARGET)
+```
+
+# Build Models
+
+In this section, the coefficients and p-values for each of the models generated are shown. Note that for the stepAIC models, the selection direction was set to `both`. The metrics for each of the models are shown in the "Model Selection" section in this report.
+
+```{r, message = FALSE, echo = FALSE}
+#create data frame with 0 rows and 3 columns
+tracker <- data.frame(matrix(ncol = 3, nrow = 0))
+lin_reg_tracker <- data.frame(matrix(ncol = 5, nrow = 0))
+
+#provide column names
+colnames(tracker) <- c("Model", "AIC", "MSE")
+colnames(lin_reg_tracker) <- c("Model", "MSE", "R-Squared", "Adjusted R-Squared", "F-Statistic")
+
+#create function to update the tracker
+update_tracker <- function(model_name, actual, predicted, model_obj){
+  aic = model_obj$aic
+  mse = mean((as.numeric(actual) - predicted)^2)
+  
+  tracker[nrow(tracker) + 1,] <- c(model_name, round(aic, 2), round(mse, 2))
+  return(tracker)
+}
+
+update_lin_reg_tracker <- function(model_name, actual, predicted, model_obj){
+  calculated_mse <- Metrics::rmse(as.numeric(actual), predicted) ^ 2
+  r_2 <- summary(model_obj)$r.squared
+  adj_r_2 <- summary(model_obj)$adj.r.squared
+  f_statistic <- summary(model_obj)$fstatistic[1]
+  
+  lin_reg_tracker[nrow(lin_reg_tracker) + 1,] <- c(model_name, round(calculated_mse, 2), round(r_2, 3), round(adj_r_2, 3), round(f_statistic, 2))
+  return(lin_reg_tracker)
+}
+```
+
+### Poisson Regression Models
+
+There were 4 different poisson regression models that were constructed in this analysis using imputed/modified and original data. They are:
+
+- Poisson regression model using original data
+- Poisson regression model using modified data
+- Poisson regression model with significant features selected using stepAIC using original data.
+- Poisson regression model with significant features selected using stepAIC using modified data.
+
+#### Poission Regression Model with Original Data
+
+
+The p-values for the coefficients for this model are shown below. The `LabelAppeal`, `STARS`, `VolatileAcidity`, `AcidIndex`, and `Intercept` are statistically significant when using a 95% confidence interval. It was shown earlier in the report that `STARS`, `LabelAppeal` and `AcidIndex` were highly correlated with the `TARGET` variable, so these low p-values are to be expected.
+
+```{r}
+poisson_original = glm(TARGET ~  ., data = original_train %>% dplyr::mutate(TARGET = as.numeric(TARGET)), family=poisson)
+sumary(poisson_original)
+
+poisson_original_predictions <- predict.glm(poisson_original, original_test, type = "response")
+
+tracker <- update_tracker("Pois. w/ Original Data", original_test$TARGET, poisson_original_predictions, poisson_original)
+```
+
+#### Poisson Regression Model with Modified Data
+
+
+Once again, the same highly correlated variables have low p-values. With that being said, it would appear that the p-values for these variables is lower than the p-values shown in the poisson regression model with original data.
+
+```{r}
+poisson_modified = glm(TARGET ~  ., data = modified_train %>% dplyr::mutate(TARGET = as.numeric(TARGET)), family=poisson)
+sumary(poisson_modified)
+
+poisson_modified_predictions <- predict.glm(poisson_modified, modified_test, type = "response")
+
+tracker <- update_tracker("Pois. w/ Modified Data", modified_test$TARGET, poisson_modified_predictions, poisson_modified)
+```
+
+#### Step AIC for Poisson with Original Data
+
+
+With the exception of `Chlorides` and `Alcohol`, the rest of the variables are statistically significant and those same 3 variables (`STARS`, `LabelAppeal` and `AcidIndex`) are present in this model which is to be expected.
+
+```{r}
+step_aic_poisson_original <- stepAIC(poisson_original, direction = "both", trace = FALSE)
+sumary(step_aic_poisson_original)
+
+step_aic_poisson_original_predictions <- predict.glm(step_aic_poisson_original, original_test, type = "response")
+
+tracker <- update_tracker("Step-AIC Pois. w/ Original Data", original_test$TARGET, step_aic_poisson_original_predictions, step_aic_poisson_original)
+```
+
+#### Step AIC for Poisson with Modified Data
+
+
+This model indicates that when using the imputed data, the `FreeSulfurDioxide`, `TotalSulfurDioxide`, and `VolatileAcidity` variables are statistically significant. [Grogan](https://agrifoodecon.springeropen.com/articles/10.1186/s40100-015-0038-1) indicates that "sulfur dioxide preserves wine, preventing oxidation and browning", so the amount of it is important in how many cases are bought (see Figure 2 boxplot for these variables).
+
+```{r}
+step_aic_poisson_modified <- stepAIC(poisson_modified, direction = "both", trace = FALSE)
+sumary(step_aic_poisson_modified)
+
+step_aic_poisson_modified_predictions <- predict.glm(step_aic_poisson_modified, modified_test, type = "response")
+
+tracker <- update_tracker("Step-AIC Pois. w/ Modified Data", modified_test$TARGET, step_aic_poisson_modified_predictions, step_aic_poisson_modified)
+```
+
+### Negative Binomial Models
+
+There were 4 different negative binomial models that were constructed in this analysis using imputed/modified and original data. They are:
+
+- Negative binomial model using original data
+- Negative binomial model using modified data
+- Negative binomial model with significant features selected using stepAIC using original data.
+- Negative binomial model with significant features selected using stepAIC using modified data.
+
+#### Negative Binomial Model with Original Data
+
+
+The p-values for the coefficients for this model are shown below. The `LabelAppeal`, `STARS`, `VolatileAcidity`, `AcidIndex`, and `Intercept` are statistically significant when using a 95% confidence interval. It was shown earlier in the report that `STARS`, `LabelAppeal` and `AcidIndex` were highly correlated with the `TARGET` variable, so these low p-values are to be expected. In fact, the selected variables and the p-values for this model and the poisson regression model with original data are more or less the same.
+
+```{r}
+neg_binom_orig = glm.nb(TARGET ~  ., data = original_train %>% dplyr::mutate(TARGET = as.numeric(TARGET)))
+summary(neg_binom_orig)
+
+neg_binom_orig_predictions <- predict.glm(neg_binom_orig, original_test, type = "response")
+
+tracker <- update_tracker("Neg. Binom. w/ Original Data", original_test$TARGET, neg_binom_orig_predictions, neg_binom_orig)
+```
+
+#### Negative Binomial Model with Modified Data
+
+
+Once again, the same highly correlated variables have low p-values along with the `FreeSulfurDioxide` and `TotalSulfurDioxide`, and almost but not quite, `Chlorides`, which were not statistically significant when the original data was used. With that being said, it would appear that the p-values for these variables is lower than the p-values shown in the negative binomial model with original data. In fact, the selected variables and the p-values for this model and the poisson regression model with modified data are more or less the same.
+
+```{r}
+neg_binom_modified = glm.nb(TARGET ~  ., data = modified_train %>% dplyr::mutate(TARGET = as.numeric(TARGET)))
+summary(neg_binom_modified)
+
+neg_binom_modified_predictions <- predict.glm(neg_binom_modified, modified_test, type = "response")
+
+tracker <- update_tracker("Neg. Binom. w/ Modified Data", modified_test$TARGET, neg_binom_modified_predictions, neg_binom_modified)
+```
+
+#### Step AIC for Negative Binomial Model with Original Data
+
+
+With the exception of `Chlorides` and `Alcohol`, the rest of the variables are statistically significant and those 3 variables that were tested against `TARGET` using the Chi-square test (`STARS`, `LabelAppeal` and `AcidIndex`) are present in this model which is to be expected. In fact, the selected variables and the p-values for this model and the Step AIC for poisson regression model with original data are more or less the same.
+
+```{r}
+step_aic_neg_binom_original <- stepAIC(neg_binom_orig, direction = "both", trace = FALSE)
+summary(step_aic_neg_binom_original)
+
+step_aic_neg_binom_original_predictions <- predict.glm(step_aic_neg_binom_original, original_test, type = "response")
+
+tracker <- update_tracker("Step-AIC Neg. Binom. w/ Original Data", original_test$TARGET, step_aic_neg_binom_original_predictions, step_aic_neg_binom_original)
+```
+
+#### Step AIC for Negative Binomial Model with Modified Data
+
+
+Once again, the selected variables and the p-values for this model and the Step AIC for poisson regression model with modified data are more or less the same.
+
+```{r}
+step_aic_neg_binom_modified <- stepAIC(neg_binom_modified, direction = "both", trace = FALSE)
+summary(step_aic_neg_binom_modified)
+
+step_aic_neg_binom_modified_predictions <- predict.glm(step_aic_neg_binom_modified, modified_test, type = "response")
+
+tracker <- update_tracker("Step-AIC Neg. Binom. w/ Modified Data", modified_test$TARGET, step_aic_neg_binom_modified_predictions, step_aic_neg_binom_modified)
+```
+
+### Multiple Linear Regression Models
+
+There were 4 different multiple linear regression models that were constructed in this analysis using imputed/modified and original data. They are:
+
+- Multiple linear regression model using original data
+- Multiple linear regression model using modified data
+- Multiple linear regression model with significant features selected using stepAIC using original data.
+- Multiple linear regression model with significant features selected using stepAIC using modified data.
+
+#### Multiple Linear Regression Model with Original Data
+
+
+The p-values for the coefficients for this model are shown below. The `LabelAppeal`, `STARS`, `VolatileAcidity`, `Chlorides`, `Alcohol`, `AcidIndex`, and `Intercept` are statistically significant when using a 95% confidence interval. It was shown earlier in the report that `STARS`, `LabelAppeal` and `AcidIndex` were highly correlated with the `TARGET` variable, so these low p-values are to be expected.
+
+```{r}
+lin_reg_orig = lm(TARGET ~  ., data = original_train %>% dplyr::mutate(TARGET = as.numeric(TARGET)))
+sumary(lin_reg_orig)
+
+lin_reg_orig_predictions <- predict.glm(lin_reg_orig, original_test, type = "response")
+
+lin_reg_tracker <- update_lin_reg_tracker("Multiple Linear w/ Original Data", original_test$TARGET, lin_reg_orig_predictions, lin_reg_orig)
+```
+
+#### Multiple Linear Regression Model with Modified Data
+
+
+Once again, the same highly correlated variables have low p-values along with the `FreeSulfurDioxide` and `TotalSulfurDioxide` variables, which were not statistically significant when the original data was used. With that being said, it would appear that the p-value for `VolatileAcidity` has decreased further while the p-value for `Alcohol` has increased but is still statistically significant.
+
+```{r}
+lin_reg_modified = lm(TARGET ~  ., data = modified_train %>% dplyr::mutate(TARGET = as.numeric(TARGET)))
+sumary(lin_reg_modified)
+
+lin_reg_modified_predictions <- predict.glm(lin_reg_modified, modified_test, type = "response")
+
+lin_reg_tracker <- update_lin_reg_tracker("Multiple Linear w/ Modified Data", modified_test$TARGET, lin_reg_modified_predictions, lin_reg_modified)
+```
+
+#### Step AIC for Multiple Linear Regression Model with Original Data
+
+
+With the exception of `FreeSulfurDioxide` and `TotalSulfurDioxide`, the rest of the variables are statistically significant and those 3 variables that were tested against `TARGET` using the Chi-square test (`STARS`, `LabelAppeal` and `AcidIndex`) are present in this model which is to be expected. Basically all of the statistically significant from the multiple linear regression model with original data are used here.
+
+```{r}
+step_aic_lin_reg_original <- stepAIC(lin_reg_orig, direction = "both", trace = FALSE)
+sumary(step_aic_lin_reg_original)
+
+step_aic_lin_reg_original_predictions <- predict.glm(step_aic_lin_reg_original, original_test, type = "response")
+
+lin_reg_tracker <- update_lin_reg_tracker("Step-AIC Multiple Linear w/ Original Data", original_test$TARGET, step_aic_lin_reg_original_predictions, step_aic_lin_reg_original)
+```
+
+#### Step AIC for Multiple Linear Regression Model with Modified Data
+
+
+With the exception of `CitricAcid` and `Sulphates`, the rest of the variables are statistically significant and those 3 variables that were tested against `TARGET` using the Chi-square test (`STARS`, `LabelAppeal` and `AcidIndex`) are present in this model which is to be expected. Basically all of the statistically significant from the multiple linear regression model with modified data are used here.
+
+```{r}
+step_aic_lin_reg_modified <- stepAIC(lin_reg_modified, direction = "both", trace = FALSE)
+sumary(step_aic_lin_reg_modified)
+
+step_aic_lin_reg_modified_predictions <- predict.glm(step_aic_lin_reg_modified, modified_test, type = "response")
+
+lin_reg_tracker <- update_lin_reg_tracker("Step-AIC Multiple Linear w/ Modified Data", modified_test$TARGET, step_aic_lin_reg_modified_predictions, step_aic_lin_reg_modified)
+```
+
+# Model Selection
+
+### Binary Logistic Regression Models
+
+```{r}
+knitr::kable(tracker)
+```
+*Table 3: Model metrics for binary logistic regression models*
+
+```{r, message = FALSE, echo = FALSE}
+# ggplot(tracker, aes(x=factor(Model, level=c('Simple', 'Transformed', 'Negative Bimodal', 'Reduced Transformed')), y=Precision)) +
+#   geom_bar(stat = "identity") +
+#   ylab("Precision") +
+#   xlab("Model") +
+#   theme(axis.text.x = element_text(angle = 90))
+
+plt <- melt(tracker[,colnames(tracker)],id.vars = 1)
+
+ggplot(plt, aes(x=factor(Model, level=tracker$Model), y = value)) + 
+  geom_bar(aes(fill = variable),stat = "identity",position = "dodge") +
+  xlab("Model") +
+  ylab("Score") +
+  theme(axis.text.x = element_text(angle = 90))
+```
+*Figure 7: Bar chart of metrics for binary logistic regression models*
+
+Figure 7 shows us that the Step-AIC poisson model with original data performs best out of all of the models. Even though the MSE is the same for all of the count regression models when using the original data, the AIC varies between each of them, and the Step-AIC poisson model with original data has the lowest AIC.
+
+### Multiple Linear Regression Models
+
+```{r}
+knitr::kable(lin_reg_tracker)
+```
+*Table 4: Model metrics for multiple linear regression models*
+
+```{r, message = FALSE, echo = FALSE}
+# ggplot(tracker, aes(x=factor(Model, level=c('Simple', 'Transformed', 'Negative Bimodal', 'Reduced Transformed')), y=Precision)) +
+#   geom_bar(stat = "identity") +
+#   ylab("Precision") +
+#   xlab("Model") +
+#   theme(axis.text.x = element_text(angle = 90))
+
+plt <- melt(lin_reg_tracker[,colnames(lin_reg_tracker)],id.vars = 1)
+
+ggplot(plt, aes(x=factor(Model, level=lin_reg_tracker$Model), y = value)) + 
+  geom_bar(aes(fill = variable),stat = "identity",position = "dodge") +
+  xlab("Model") +
+  ylab("Score") +
+  theme(axis.text.x = element_text(angle = 90))
+```
+*Figure 8: Metrics bar chart for multiple linear regression models*
+
+Among the linear regression models, the Step-AIC multiple linear regression model with modified data performs the best. When compared to the multiple linear and step-AIC models using original data, the R-squared and adjusted R-squareds are higher. Also the Step-AIC multiple linear regression model with modified data has a slightly higher F-statistic score than the multiple linear regression model with modified data, making this model the best model since 3 out of the 4 metrics for this model beat out the rest of the models. Since the distribution for the imputed data is roughly the same as the distribution as the original data, we can conclude that the Step-AIC multiple linear regression model with modified data will perform well when presented with new data.
+
+Based on the results shown in Figure 7 and Figure 8 and the model summaries in the "Build Models" section, the Step AIC poisson regression model with original data is the best model out of all of these models. It is more parsimonious than the Step-AIC multiple linear regression model with modified data, making it the best overall model. With this model, we are able to generate predictions for an approximate number of wine cases that could be ordered based on the wine characteristics (predictor variables) shown in the "Step AIC for Poisson with Original Data" section.
+
+
+```{r}
+eval_predictions_step_aic_poisson_original <- round(predict.glm(step_aic_poisson_original, wine_eval, type = "response"), 0)
+eval_pred_df <- data.frame(eval_predictions_step_aic_poisson_original)
+colnames(eval_pred_df) <- c("Predictions")
+
+write.csv(eval_pred_df, file = "predictions.csv", row.names = FALSE)
+```
