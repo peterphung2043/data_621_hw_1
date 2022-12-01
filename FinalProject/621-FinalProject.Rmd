@@ -10,26 +10,326 @@ output:
   theme: cosmo
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+```{r setup, include=FALSE, echo = FALSE, warning = FALSE, message = FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, comment = NA)
+
+library(tidyverse)
+library(reshape2)
+library(faraway)
+library(ggplot2)
+library(mice)
+library(caTools)
+library(MASS)
+library(corrplot)
+library(car)
+library(PRROC)
+library(pROC)
 ```
 
 ## Probability of Cardiovascular Disease
 
 This research centers around building a model that predicts the probability of cardiovascular disease given some prior health information. 
 
-## Abstract
+## Abstract- Ahmed
 
-## Keywords
+## Keywords - Ahmed
 
-## Introduction
+## Introduction - Ahmed
 
-## Literature review
+## Literature review - Krutika
 
-## Methodology
+## Methodology - Alec
 
 ## Experimentation and Results
+```{r data prep}
+#my_git_url <- getURL("https://raw.githubusercontent.com/peterphung2043/data_621_hw_1/main/FinalProject/framingham.csv")
+heart_history <- read.csv("https://raw.githubusercontent.com/peterphung2043/data_621_hw_1/main/FinalProject/framingham.csv")
+heart_history_original <- heart_history
+```
+
+### Initial Data Cleanup
+```{r Convert some columns to factor}
+heart_history <- heart_history %>%
+    mutate(
+    Sex = as.factor(Sex),
+    education = as.factor(education),
+    BPMeds = as.factor(BPMeds),
+    prevalentStroke = as.factor(prevalentStroke),
+    prevalentHyp = as.factor(prevalentHyp),
+    diabetes = as.factor(diabetes),
+    TenYearCHD = as.factor(TenYearCHD),
+    currentSmoker = as.factor(currentSmoker)
+    )
+```
+
+```{r Convert some columns to factor for orignial data}
+heart_history_original <- heart_history %>%
+    mutate(
+    Sex = as.factor(Sex),
+    education = as.factor(education),
+    BPMeds = as.factor(BPMeds),
+    prevalentStroke = as.factor(prevalentStroke),
+    prevalentHyp = as.factor(prevalentHyp),
+    diabetes = as.factor(diabetes),
+    TenYearCHD = as.factor(TenYearCHD),
+    currentSmoker = as.factor(currentSmoker)
+    )
+
+heart_history_original <- heart_history_original[complete.cases(heart_history_original), ]
+```
+
+### Data Exploration
+```{r data }
+summary(heart_history)
+```
+
+```{r message = FALSE, echo = FALSE, warning = FALSE, results = 'hide', fig.keep='all'}
+heart_history %>% dplyr::select(-TenYearCHD) %>%
+  keep(is.numeric) %>% 
+  gather() %>% 
+  ggplot(aes(value)) +
+    facet_wrap(~ key, scales = "free") +
+    geom_density(col = 'red') +
+    geom_histogram(aes(y = stat(density)))
+
+```
+```{r message = FALSE, echo = FALSE, warning = FALSE, results = 'hide', fig.keep='all'}
+melt(heart_history) %>%
+  ggplot(aes(x = TenYearCHD, y = value, fill = TenYearCHD)) +
+  geom_boxplot() +
+  facet_wrap(variable~., scales = "free")
+```
+
+
+```{r}
+corrplot(cor(dplyr::select_if(heart_history, is.numeric), use = "na.or.complete"),
+         method = 'number',
+         type = 'lower',
+         diag = FALSE,
+         col = 'black',
+         number.cex = 0.75,
+         tl.cex = 0.5)
+```
+```{r echo = FALSE}
+heart_history  %>%
+  summarise_all(list(~is.na(.)))%>%
+  pivot_longer(everything(),
+               names_to = "variables", values_to="missing") %>%
+  count(variables, missing) %>%
+  ggplot(aes(y=variables,x=n,fill=missing))+
+  geom_col()+
+  scale_fill_manual(values=c("skyblue3","gold"))+
+  theme(axis.title.y=element_blank()) + theme_classic()
+
+```
+## Data Preparation
+
+### Removing Outlier Values 
+From research, some of these heart rates, diastolic, and systolic values as well as total cholesterol do not seem realistic. Imputing the values would not be appropriate because this is medical data and would harm the authenticity of the dataset, and so we have decided to simply remove the bad data. 
+
+-Krutika
+-heartRate: we can probably remove the records over 100 because that is probably indicative of a stroke in-progress
+-diaBP/sysBP: we can remove the extreme measurements here as well for similar reasons
+max sys/dia = 160/100
+min sys/dia = 100/65
+-tolChol: we can probably remove the records over 500
+
+```{r Removing outlier BP values }
+heart_history <- heart_history[heart_history$sysBP < 160 & heart_history$sysBP > 100,]
+heart_history <- heart_history[heart_history$diaBP < 100 & heart_history$diaBP > 65,]
+```
+
+```{r Removing outlier heart rates}
+heart_history <- heart_history[heart_history$heartRate < 100 & heart_history$heartRate > 25,]
+```
+
+```{r Remove NAs}
+heart_history <- heart_history[complete.cases(heart_history), ]
+```
+
+```{r check}
+summary(heart_history)
+```
+
+```{r message = FALSE, echo = FALSE, warning = FALSE, results = 'hide', fig.keep='all'}
+heart_history %>% dplyr::select(-TenYearCHD) %>%
+  keep(is.numeric) %>% 
+  gather() %>% 
+  ggplot(aes(value)) +
+    facet_wrap(~ key, scales = "free") +
+    geom_density(col = 'red') +
+    geom_histogram(aes(y = stat(density)))
+
+```
+
+### Split Data Into Testing and Training
+
+The data was into testing and training subsets such that 70% of it will be used to train, and 30% to test. The first row shows the split for the testing data while the second row shows the split for the training data. The first two rows are for the original data set, while the last two rows are for the data set with imputed NA values.
+
+```{r }
+set.seed(123)
+
+original_split <- sample.split(heart_history_original$TenYearCHD, SplitRatio = 0.7)
+original_train <-  subset(heart_history_original, original_split == TRUE)
+original_test <- subset(heart_history_original, original_split == FALSE)
+
+modified_split <- sample.split(heart_history$TenYearCHD, SplitRatio = 0.7)
+modified_train <-  subset(heart_history, modified_split == TRUE)
+modified_test <- subset(heart_history, modified_split == FALSE)
+
+table(original_test$TenYearCHD)
+table(original_train$TenYearCHD)
+
+table(modified_test$TenYearCHD)
+table(modified_train$TenYearCHD)
+```
+
+### Box-Cox Transformation for Skewed Variables
+
+Based on the previous distribution plot (using histograms) we noticed that a select group of columns exhibited non-normal skew. In order to address this skewness and attempt to normalize these features for future modeling, we will employ box-cox transformations. Because some of these values include 0, we will need to replace any zero values with infintesimmaly small, non-zero values.
+
+The $\lambda$'s that were used to transform the skewed variables are shown on Table 2.
+
+```{r replace 0 values in cigs with small value}
+heart_history$cigsPerDay[heart_history$cigsPerDay == 0] <- 1e-6
+```
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+skewed_vars <-   c("BMI", "glucose", "totChol")
+lambdas <- powerTransform(eval(parse(text = paste("cbind(",toString(skewed_vars),")", "~ 1"))), heart_history)
+transformed_data <- bcPower(lambdas$y, coef(lambdas))
+colnames(transformed_data) <- sprintf("tf_%s", skewed_vars)
+heart_history <- cbind(heart_history, transformed_data)
+```
+
+```{r warning = FALSE, message = FALSE, echo = FALSE, results = 'hide', fig.keep='all'}
+as.data.frame(transformed_data) %>%
+  keep(is.numeric) %>% 
+  gather() %>% 
+  ggplot(aes(value)) +
+    facet_wrap(~ key, scales = "free") +
+    geom_histogram(bins = 35)
+```
+# Build Models
+```{r accuracy_function, results = FALSE}
+
+# Accuracy Function
+accuracy <- function(true_values, predictions){
+  TP <- sum(true_values == 1 & predictions == 1)
+  TN <- sum(true_values == 0 & predictions == 0)
+  round((TP + TN)/length(true_values), 4)
+}
+```
+
+```{r error_function, results = FALSE}
+
+## Classification error rate function
+error <- function(true_values, predictions){
+  FP <- sum(true_values == 0 & predictions == 1)
+  FN <- sum(true_values == 1 & predictions == 0)
+  round((FP + FN)/length(true_values), 4)
+}
+```
+
+```{r fscore_function, results = FALSE}
+
+## F-score function
+fscore <- function(precision_score, recall_score) {
+  (2* precision_score * recall_score)/(precision_score + recall_score)
+}
+```
+
+```{r precision_function, results = FALSE}
+
+## Precision function
+##The precision contains 2 values corresponding to the classes 0, and 1. 
+##In binary classification tasks, we will look at the values of the 
+##positive class (1) for reporting metrics.
+precision <- function(true_values, predictions){
+  TP <- sum(true_values == 1 & predictions == 1)
+  FP <- sum(true_values == 0 & predictions == 1)
+  
+  round(TP/(TP+FP), 4)
+}
+```
+
+```{r recall_function, results = FALSE}
+
+## Sensitivity function
+##The sensitivity/recall contains 2 values corresponding to the classes 0, and 1. 
+##In binary classification tasks, we will look at the values of the positive 
+##class (1) for reporting metrics.
+recall <- function(true_values, predictions){
+  TP <- sum(true_values == 1 & predictions == 1)
+  FN <- sum(true_values == 1 & predictions == 0)
+  
+  round(TP/(TP+FN), 4)
+}
+```
+
+```{r}
+
+## ROC function for step 10
+ROC <- function(x, y){
+  x <- x[order(y, decreasing = TRUE)]
+  TPR <- cumsum(x) / sum(x)
+  FPR <- cumsum(!x) / sum(!x)
+  df <- data.frame(TPR, FPR, x)
+  
+  FPR_df <- c(diff(df$FPR), 0)
+  TPR_df <- c(diff(df$TPR), 0)
+  area_under_curve <- sum(df$TPR * FPR_df) + sum(TPR_df * FPR_df)/2
+  
+  plot(df$FPR, df$TPR, type = "l",
+       main = "ROC ",
+       xlab = "FPR",
+       ylab = "TPR")
+  abline(a = 0, b = 1)
+  legend("center", legend= c("AUC", round(area_under_curve, 4)))
+  
+}
+```
+
+
+```{r, message = FALSE, echo = FALSE}
+#create data frame with 0 rows and 3 columns
+tracker <- data.frame(matrix(ncol = 8, nrow = 0))
+
+#provide column names
+colnames(tracker) <- c("Model", "Precision", "Recall", "AIC", "AUC", "F-score", "Accuracy", "Error")
+
+#create function to update the tracker
+update_tracker <- function(tracker, model_name, true_values, predictions, model_object, df){
+  accuracy = accuracy(true_values, predictions)
+  error = error(true_values, predictions)
+  recall = recall(true_values, predictions)
+  precision = precision(true_values, predictions)
+  aic = model_object$aic
+  auc = as.numeric(str_extract(roc(true_values,  predict(model_object, df, interval = "prediction"))$auc, regex("\\d\\.\\d*")))
+  f_score = fscore(precision, recall)
+  
+  
+  tracker[nrow(tracker) + 1,] <- c(model_name, round(precision, 2), round(recall, 2), round(aic, 2), round(auc, 2), round(f_score, 3), round(accuracy, 2), round(error, 2))
+  return(tracker)
+}
+
+```
+## Binary Logistic Regression Model with Original Data
+
+A simple model was generated using all of the predictors and served as a baseline to which the other models were compared against.
+
+```{r}
+simple_log_reg <- glm(TenYearCHD ~ ., data = original_train, family = binomial(link = "logit"))
+summary(simple_log_reg)
+
+simple_predictions <- predict.glm(simple_log_reg, original_test, type = "response")
+
+simple_predictions_binary <- ifelse(simple_predictions > 0.5, 1, 0)
+
+tracker <- update_tracker(tracker, "Simple", original_test$TenYearCHD, simple_predictions_binary, simple_log_reg, original_test)
+```
 
 ## Discussion and Conclusions
+
 
 ## References
