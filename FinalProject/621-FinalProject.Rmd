@@ -1,0 +1,35 @@
+---
+title: "621-FinalProject"
+author: "Ahmed Elsaeyed"
+date: '2022-11-30'
+output:
+  pdf_document: default
+  df_print: paged
+  fig_caption: yes
+  css: ae_theme.css
+  theme: cosmo
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Probability of Cardiovascular Disease
+
+This research centers around building a model that predicts the probability of cardiovascular disease given some prior health information. 
+
+## Abstract
+
+## Keywords
+
+## Introduction
+
+## Literature review
+
+## Methodology
+
+## Experimentation and Results
+
+## Discussion and Conclusions
+
+## References
