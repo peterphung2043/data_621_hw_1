@@ -26,28 +26,48 @@ library(PRROC)
 library(pROC)
 ```
 
-## Probability of Cardiovascular Disease
+# Probability of Cardiovascular Disease
 
 This research centers around building a model that predicts the probability of cardiovascular disease given some prior health information. 
 
-## Abstract- Ahmed
+# Abstract- Ahmed
 
-## Keywords - Ahmed
+# Keywords - Ahmed
 
-## Introduction - Ahmed
+# Introduction - Ahmed
 
-## Literature review - Krutika
+# Literature review - Krutika
 
-## Methodology - Alec
+# Methodology - Alec
 
-## Experimentation and Results
+HERE, PUT IN EACH OF THE VARIABLES AND THEIR DEFINITIONS (MORE FLUFF FOR THAT PAGE COUNT!). SEE THIS LINK: https://rpubs.com/amitkapoor/data621finalprj
+
+EXAMPLE TABLE YOU CAN USE TO PUT IN VARIABLES AND THEIR DESCIPTIONS
+
+```{r table1, echo=FALSE, message=FALSE, warnings=FALSE, results='asis'}
+tabl <- "
+|Variable Name|Definition|Theoretical Effect|
+|---------------|-------------|-------------:|
+|INDEX|Identification Variable (do not use)|None|
+|TARGET_FLAG|Was Car in a crash? 1=YES 0=NO|None|
+|TARGET_AMT|If car was in a crash, what was the cost|None|
+|AGE|Age of Driver|Very young people tend to be risky. Maybe very old people also.|
+|BLUEBOOK|Value of Vehicle|Unknown effect on probability of collision, but probably effect the payout if there is a crash|
+"
+
+cat(tabl) # output the table in a format good for HTML/PDF/docx conversion
+```
+
+# Experimentation and Results
+
 ```{r data prep}
 #my_git_url <- getURL("https://raw.githubusercontent.com/peterphung2043/data_621_hw_1/main/FinalProject/framingham.csv")
 heart_history <- read.csv("https://raw.githubusercontent.com/peterphung2043/data_621_hw_1/main/FinalProject/framingham.csv")
 heart_history_original <- heart_history
+
+dim(heart_history)
 ```
 
-### Initial Data Cleanup
 ```{r Convert some columns to factor}
 heart_history <- heart_history %>%
     mutate(
@@ -78,7 +98,9 @@ heart_history_original <- heart_history %>%
 heart_history_original <- heart_history_original[complete.cases(heart_history_original), ]
 ```
 
-### Data Exploration
+## Data Exploration
+
+Our data set had 4,240 observations and 16 variables. `Sex`, `education`, `currentSmoker`, `BPMeds`, `prevalentStroke`, `prevalentHyp`, `diabetes` and `TenYearCHD` in the analysis carried out in this report are categorical variables, while the rest are numeric. The histograms for the numeric variables revealed that `BMI`, `glucose`, and `totChol` were skewed, and a Box-Cox transformation was undertaken for these variables in order to create new variables that contained the transformed versions of `BMI`, `glucose`, and `totChol`. An analysis into the correlation was done in order to remove variables that were highly correlated with another. Also, the data had several observations with missing data. The methodology that was undertaken to account for these missing values is shown in the "*Missing Values*" section. For comparison purposes, two different datasets were created; one containing the original data with observations with missing values omitted, and another containing manipulated data, where the data went through several transformations as explained in this report.
 ```{r data }
 summary(heart_history)
 ```
@@ -98,6 +120,12 @@ melt(heart_history) %>%
   ggplot(aes(x = TenYearCHD, y = value, fill = TenYearCHD)) +
   geom_boxplot() +
   facet_wrap(variable~., scales = "free")
+
+melt(heart_history) %>%
+  ggplot(aes(x = Sex, y = value, fill = Sex)) +
+  geom_boxplot() +
+  facet_wrap(variable~., scales = "free")
+
 ```
 
 
@@ -110,6 +138,46 @@ corrplot(cor(dplyr::select_if(heart_history, is.numeric), use = "na.or.complete"
          number.cex = 0.75,
          tl.cex = 0.5)
 ```
+
+### Multicollinearity Analysis
+
+Correlation refers to the strength of a relationship between two or more variables. Problems arise when there significant correlation between two or more predictor variables within a dataset, as this can lead to solutions that are wildly varying and possibly numerically unstable and there is redundancy between predictor variables. One solution to this is to drop one variable that is highly correlated with the other. Calkins explains that we can describe the correlation values between variables in the follwing manner:
+
+- Correlation coefficients between 0.9 and 1 = very highly correlated
+- Correlation coefficients between 0.7 and 0.9 = highly correlated
+- Correlation coefficients between 0.5 and 0.7 = moderately correlated
+- Correlation coefficients under 0.5 = low correlation
+
+The correlations between the variables in the dataset were calculated. What was found was that the vast majority of the variables had a correlation that was less than 0.25. `sysBP` and `diaBP` had a correlation of 0.79, meaning that these two variables were highly correlated. One of these variables was removed from the dataset. When a binary logistic regression model with the original data was constructed, it was found that `sysBP` had a p-value of 0.00015 indicating a high degree of statistical significance, while `diaBP` had a p-value of 0.55. Therefore, the `diaBP` variable was removed from the dataset. The second highest correlation value after this was 0.38, and that was for the `BMI` and `diaBP` variables, but with the removal of the `diaBP` variable, and the fact that 0.38 would be considered a low correlation, `BMI` was kept in.
+
+```{r}
+# Removal of diaBP
+heart_history <- heart_history %>% dplyr::select(-diaBP)
+```
+
+### Missing Values
+
+The dataset itself contains several observations containing missing values. The percentage of missing data for each of the predictor variables is shown in Table 1.
+
+```{r table2, echo=FALSE, message=FALSE, warnings=FALSE, results='asis'}
+tabl <- "
+|Variable Name|Percentage of Missing Data|
+|---------------|-------------:|
+|education|2.48|
+|cigsPerDay|0.68|
+|BPMeds|1.25|
+|totChol|1.18|
+|BMI|0.45|
+|heartRate|0.02|
+|glucose|9.15|
+"
+cat(tabl) # output the table in a format good for HTML/PDF/docx conversion
+```
+*Table 2: Percentage of missing data for each of the variables that had missing data.*
+
+Ultimately, it was decided to remove the observations with the missing values instead of imputing. The reason for this is explained in the "*Removing Outlier Values*" section.
+
+
 ```{r echo = FALSE}
 heart_history  %>%
   summarise_all(list(~is.na(.)))%>%
@@ -125,7 +193,13 @@ heart_history  %>%
 ## Data Preparation
 
 ### Removing Outlier Values 
-From research, some of these heart rates, diastolic, and systolic values as well as total cholesterol do not seem realistic. Imputing the values would not be appropriate because this is medical data and would harm the authenticity of the dataset, and so we have decided to simply remove the bad data. 
+The boxplots, summaries, and histograms that were generated revealed that some of these heart rates, diastolic, and systolic values as well as total cholesterol do not seem realistic. Imputing the values would not be appropriate because this is medical data and would harm the authenticity of the dataset, and so we have decided to simply remove the bad data. 
+
+___________
+I removed the diaBP variable, because it had too high a p-value in the first model and it was highly colinear with sysBP
+
+- Peter
+___________
 
 -Krutika
 -heartRate: we can probably remove the records over 100 because that is probably indicative of a stroke in-progress
@@ -134,21 +208,18 @@ max sys/dia = 160/100
 min sys/dia = 100/65
 -tolChol: we can probably remove the records over 500
 
-```{r Removing outlier BP values }
+```{r Removing outliers}
+# Removing outlying sysBP values
 heart_history <- heart_history[heart_history$sysBP < 160 & heart_history$sysBP > 100,]
-heart_history <- heart_history[heart_history$diaBP < 100 & heart_history$diaBP > 65,]
-```
 
-```{r Removing outlier heart rates}
+## Removing outlying diaBP variables
+# heart_history <- heart_history[heart_history$diaBP < 100 & heart_history$diaBP > 65,]
+
+# Removing outlier heart rates
 heart_history <- heart_history[heart_history$heartRate < 100 & heart_history$heartRate > 25,]
-```
 
-```{r Remove NAs}
+# Removing observations with NAs
 heart_history <- heart_history[complete.cases(heart_history), ]
-```
-
-```{r check}
-summary(heart_history)
 ```
 
 ```{r message = FALSE, echo = FALSE, warning = FALSE, results = 'hide', fig.keep='all'}
@@ -162,33 +233,28 @@ heart_history %>% dplyr::select(-TenYearCHD) %>%
 
 ```
 
-### Split Data Into Testing and Training
-
-The data was into testing and training subsets such that 70% of it will be used to train, and 30% to test. The first row shows the split for the testing data while the second row shows the split for the training data. The first two rows are for the original data set, while the last two rows are for the data set with imputed NA values.
-
-```{r }
-set.seed(123)
-
-original_split <- sample.split(heart_history_original$TenYearCHD, SplitRatio = 0.7)
-original_train <-  subset(heart_history_original, original_split == TRUE)
-original_test <- subset(heart_history_original, original_split == FALSE)
-
-modified_split <- sample.split(heart_history$TenYearCHD, SplitRatio = 0.7)
-modified_train <-  subset(heart_history, modified_split == TRUE)
-modified_test <- subset(heart_history, modified_split == FALSE)
-
-table(original_test$TenYearCHD)
-table(original_train$TenYearCHD)
-
-table(modified_test$TenYearCHD)
-table(modified_train$TenYearCHD)
-```
-
 ### Box-Cox Transformation for Skewed Variables
 
-Based on the previous distribution plot (using histograms) we noticed that a select group of columns exhibited non-normal skew. In order to address this skewness and attempt to normalize these features for future modeling, we will employ box-cox transformations. Because some of these values include 0, we will need to replace any zero values with infintesimmaly small, non-zero values.
+For the variables that exhibited skewness as explained in the "*Data Exploration*" section of this paper, A Modern Approach to Regression with R explains the following:
 
-The $\lambda$'s that were used to transform the skewed variables are shown on Table 2.
+>    ...if the skewed predictor can be transformed to have a normal distribution conditional on Y, then just the transformed version of X should be included in the logistic regression model. (Sheather, 284)
+
+In order to address this skewness and attempt to normalize these features for future modeling, we employed Box-Cox transformations. Because some of these values include 0, we replaced any zero values with infinitesimally small, non-zero values.
+
+The $\lambda$'s that were used to transform the skewed variables are shown on Table 3.
+
+```{r table3, echo=FALSE, message=FALSE, warnings=FALSE, results='asis'}
+tabl <- "
+|Column Name|$\\lambda$|
+|---------------|-------------:|
+|BMI|-0.309|
+|glucose|-1.279|
+|totChol|0.069|
+
+"
+cat(tabl) # output the table in a format good for HTML/PDF/docx conversion
+```
+*Table 3: $\lambda$'s for transforming skewed variables to normal distribution.*
 
 ```{r replace 0 values in cigs with small value}
 heart_history$cigsPerDay[heart_history$cigsPerDay == 0] <- 1e-6
@@ -198,6 +264,7 @@ heart_history$cigsPerDay[heart_history$cigsPerDay == 0] <- 1e-6
 skewed_vars <-   c("BMI", "glucose", "totChol")
 lambdas <- powerTransform(eval(parse(text = paste("cbind(",toString(skewed_vars),")", "~ 1"))), heart_history)
 transformed_data <- bcPower(lambdas$y, coef(lambdas))
+
 colnames(transformed_data) <- sprintf("tf_%s", skewed_vars)
 heart_history <- cbind(heart_history, transformed_data)
 ```
@@ -210,7 +277,61 @@ as.data.frame(transformed_data) %>%
     facet_wrap(~ key, scales = "free") +
     geom_histogram(bins = 35)
 ```
-# Build Models
+
+### Split Data Into Testing and Training
+
+The data was into testing and training subsets such that 70% of it will be used to train, and 30% to test. The first row shows the split for the testing data while the second row shows the split for the training data. Tables 4 and 5 show the distributions of the testing and training data using the original and modified datasets.
+
+```{r table4, echo=FALSE, message=FALSE, warnings=FALSE, results='asis'}
+orig_tabl <- "
+||Number of Observations where `TenYearCHD` = 1|Number of Observations where `TenYearCHD` = 0|
+|---------------|---------------|-------------:|
+|Test|930|167|
+|Train|2171|390|
+
+"
+
+cat(orig_tabl)
+```
+*Table 4: Distribution of testing and training data using original dataset*
+
+
+```{r, table5, echo=FALSE, message=FALSE, warnings=FALSE, results='asis'}
+mod_tabl <- "
+||Number of Observations where `TenYearCHD` = 1|Number of Observations where `TenYearCHD` = 0|
+|---------------|---------------|-------------:|
+|Test|736|109|
+|Train|1716|255|
+
+"
+
+cat(mod_tabl)
+```
+*Table 5: Distribution of testing and training data using modified/transformed dataset*
+
+
+```{r }
+set.seed(123)
+
+original_split <- sample.split(heart_history_original$TenYearCHD, SplitRatio = 0.7)
+original_train <-  subset(heart_history_original, original_split == TRUE)
+original_test <- subset(heart_history_original, original_split == FALSE)
+
+modified_split <- sample.split(heart_history$TenYearCHD, SplitRatio = 0.7)
+modified_train <-  subset(heart_history, modified_split == TRUE)
+modified_test <- subset(heart_history, modified_split == FALSE)
+
+
+# table(original_test$TenYearCHD)
+# table(original_train$TenYearCHD)
+# 
+# table(modified_test$TenYearCHD)
+# table(modified_train$TenYearCHD)
+
+```
+
+## Building Models
+
 ```{r accuracy_function, results = FALSE}
 
 # Accuracy Function
@@ -314,22 +435,166 @@ update_tracker <- function(tracker, model_name, true_values, predictions, model_
 }
 
 ```
-## Binary Logistic Regression Model with Original Data
 
-A simple model was generated using all of the predictors and served as a baseline to which the other models were compared against.
+### Binary Logistic Regression Model with Original Data
+
+A binary logistic regression model was generated using the original dataset. The observations with missing values were omitted. The final binary logistic regression takes on the following form:
+
+$$
+\begin{aligned}
+ logit(p) = -9.155 + (0.504*Sex_{male}) + (0.066*age) + \\
+ (-0.290 * education_2) + (-0.223 * education_3) + (-0.120*education_4) + \\
+ (0.086 * currentSmoker_{Yes}) + (0.019 * cigsPerDay) + (0.123 * BPMeds_1) + \\
+ (0.982 * prevalentStroke_1) + (0.091 * prevalentHyp_1) + (-0.435 * diabetes_{Yes}) + \\
+ (0.002 * totChol) + (0.018 *sysBP) + (-0.005 * diaBP) + (0.02 * BMI) + \\
+ (-0.005 * heartRate) + (0.01 * glucose)
+\end{aligned}
+$$
+*Equation 1: Binary logistic regression model using original data.*
+
+In this model, the variables that had a p-value greater than 0.05 were `Sex` `age`, `cigsPerDay`, `sysBP` and `glucose`. The sex of the person definitely seems to play a significant factor in determining whether or not a person will develop heart disease. Figure XX revealed that men that were surveyed on average smoked more cigarettes per day than women. In fact, Figure XX reveals that within the sample, women on average do not smoke. Since smoking increases the formation of plaque in the blood vessels which leads to coronary heart disease according to the CDC, the fact that men smoke more than women is why the sex variable in particular is of great statistical significance. The National Institute on Aging points out the following:
+
+> People age 65 and older are much more likely than younger people to suffer a heart attack, to have a stroke, or to develop coronary heart disease (commonly called heart disease) and heart failure. Heart disease is also a major cause of disability, limiting the activity and eroding the quality of life of millions of older people. (NIH)
+
+This explains why `age` was statstically significant in this model as well. The Brisighella Heart Study conducted in 2003 was able to conclude that within their sample that systolic blood pressure was a strong predictor of coronary heart disease, while diastolic blood pressure was not statistically significant. This result in this study is also seen in this model; `sysBP` has a much lower p-value (0.0001) than `diaBP` (0.55). `cigsPerDay` is tied to `Sex` as shown on Figure xx, which is why the `cigsPerDay` variable is also statistically significant. Park was able to conclude the following about glucose levels and coronary heart disease based on a study which had a sample size of 1,197,384 adults:
+
+> Both low glucose level and impaired fasting glucose should be considered as predictors of risk for stroke and coronary heart disease. The fasting glucose level associated with the lowest cardiovascular risk may be in a narrow range. (Park) 
+
+This provides evidence as to probably why `glucose` is also statistically significant within the model.
+
 
 ```{r}
-simple_log_reg <- glm(TenYearCHD ~ ., data = original_train, family = binomial(link = "logit"))
-summary(simple_log_reg)
+bin_log_orig <- glm(TenYearCHD ~ ., data = original_train, family = binomial(link = "logit"))
+summary(bin_log_orig)
 
-simple_predictions <- predict.glm(simple_log_reg, original_test, type = "response")
+bin_log_orig_predictions <- predict.glm(bin_log_orig, original_test, type = "response")
 
-simple_predictions_binary <- ifelse(simple_predictions > 0.5, 1, 0)
+bin_log_orig_predictions_binary <- ifelse(bin_log_orig_predictions > 0.5, 1, 0)
 
-tracker <- update_tracker(tracker, "Simple", original_test$TenYearCHD, simple_predictions_binary, simple_log_reg, original_test)
+tracker <- update_tracker(tracker, "Bin. Log. w/ Original Data", original_test$TenYearCHD, bin_log_orig_predictions_binary, bin_log_orig, original_test)
+```
+### Binary Logistic Regression Model with Modified Data
+
+A binary logistic regression model was generated using the modified dataset. The observations with missing values were omitted. The final binary logistic regression model that used modified data takes on the following form:
+
+$$
+\begin{aligned}
+ logit(p) = -128.3 + (0.52*Sex_{male}) + (0.073*age) + \\
+ (-0.105 * education_2) + (-0.55 * education_3) + (-0.074*education_4) + \\
+ (0.277 * currentSmoker_{Yes}) + (0.013 * cigsPerDay) + (0.091 * BPMeds_1) + \\
+ (0.651 * prevalentStroke_1) + (0.145 * prevalentHyp_1) + (-0.026 * diabetes_{Yes}) + \\
+ (0.009 * totChol) + (0.013 * sysBP) + (0.18 * BMI) + (-0.009 * heartRate) + \\
+ (0.013 * glucose) + (-13 * tf\_BMI) + (-140.9 * tf\_glucose) + (-1.39 * tf\_totChol)
+\end{aligned}
+$$
+*Equation 2: Binary logistic regression model using modified data.*
+
+The parameters in this model that had p-values less than 0.05 were `Sex`, `age`, `education_3`, `sysBP` and `glucose`. None of the Box-Cox transformed variables had p-values less than 0.05. We see the same variables (except `cigsPerDay`) that were statistically significant when the original data was used.
+
+```{r}
+bin_log_modified <- glm(TenYearCHD ~ ., data = modified_train, family = binomial(link = "logit"))
+summary(bin_log_modified)
+
+bin_log_modified_predictions <- predict.glm(bin_log_modified, modified_test, type = "response")
+
+bin_log_modified_predictions_binary <- ifelse(bin_log_modified_predictions > 0.5, 1, 0)
+
+tracker <- update_tracker(tracker, "Bin. Log. w/ Modified Data", modified_test$TenYearCHD, bin_log_modified_predictions_binary, bin_log_modified, modified_test)
 ```
 
-## Discussion and Conclusions
+### Step-AIC Binary Linear Regression Model with Original Data
 
+Step AIC works by deselecting features that negatively affect the AIC, which is a criterion similar to the R-squared. It selects the model with not only the best AIC score but also a model with less predictors than the full model, since the full model may have predictors that do not contribute or negatively contribute to the model's performance. The direction for the Step AIC algorithm was set to `both`, because this implements both forward and backward elimination in order to decide if a predictor negatively affects the model's performance. The final step-AIC binary logistic regression model that used the original data takes on the following form:
 
-## References
+$$
+\begin{aligned}
+ logit(p) = -9.589 + (0.503*Sex_{male}) + (0.072*age) +  (0.02 * cigsPerDay) + \\
+ (1.004 * prevalentStroke_1) + (0.017 * sysBP) + (0.023 * BMI) + (0.009 * glucose) 
+\end{aligned}
+$$
+*Equation 3: Step-AIC binary logistic regression model using the original data.*
+
+The p-values for this model, which is far more parsimonious than the original binary logistic regression model that used all of the predictors, were all below 0.05 except for `prevalentStroke1` and `BMI`, which had p-values of 0.0861 and 0.1179 respectively.
+
+```{r}
+step_aic_bin_log_orig <- stepAIC(bin_log_orig, direction = "both", trace = FALSE)
+summary(step_aic_bin_log_orig)
+
+step_aic_bin_log_orig_predictions <- predict.glm(step_aic_bin_log_orig, original_test, type = "response")
+step_aic_bin_log_orig_predictions_binary <- ifelse(step_aic_bin_log_orig_predictions > 0.5, 1, 0)
+
+tracker <- update_tracker(tracker, "Step AIC Bin. Log. w/ Original Data", original_test$TenYearCHD, step_aic_bin_log_orig_predictions_binary, step_aic_bin_log_orig, original_test)
+```
+### Step-AIC Binary Logistic Regression Model with Modified Data
+
+The final step-AIC binary logistic regression model that used the modified data takes on the following form:
+
+$$
+\begin{aligned}
+ logit(p) = -14.41 + (0.52 * Sex_{male}) + (0.073 * age) + (-0.09 * education_2) + (-0.55 * education_3) + \\
+ (-0.056 * education_4) + (0.02 * cigsPerDay) + (0.015 * sysBP) + (0.2 * BMI) + \\
+ (0.009 * glucose) + (-14.76 * tf\_BMI)
+\end{aligned}
+$$
+*Equation 4: Step-AIC binary logistic regression model using the modified data.*
+
+The p-values for this model, which is far more parsimonious than the original binary logistic regression model that used all of the predictors, were all below 0.05 except for `Intercept`, `education2`, `education4`, `BMI` and `tf_BMI`; 3 more than the amount of predictors that had values above 0.05 for the step-AIC binary logistic regression model using the original predictors.
+
+```{r}
+step_aic_bin_log_modified <- stepAIC(bin_log_modified, direction = "both", trace = FALSE)
+summary(step_aic_bin_log_modified)
+
+step_aic_bin_log_modified_predictions <- predict.glm(step_aic_bin_log_modified, modified_test, type = "response")
+step_aic_bin_log_modified_predictions_binary <- ifelse(step_aic_bin_log_modified_predictions > 0.5, 1, 0)
+
+tracker <- update_tracker(tracker, "Step AIC Bin. Log. w/ Modified Data", modified_test$TenYearCHD, step_aic_bin_log_modified_predictions_binary, step_aic_bin_log_modified, modified_test)
+```
+## Model Selection
+
+The various metrics that were used to determine the best model are shown in Table 6. Figure XX is a bar chart which plots all of the metrics for all of the models. Table 6 and Figure xx reveal that the accuracy, precision, recall, AUC, and F-score are higher when the original data was used as opposed to the modified. Table 6 revealed that the step-AIC binary logistic regression model using the original data has the second highest AIC, but it also has the highest precision and F-score out of all of the models. Taking all of this into consideration, and the fact that the step-AIC binary logistic regression model using the original data is the most parsimonious out of all of the models, this model is the best performing model out of all of them. The AUC curve for the step-AIC binary logistic regression with original data is provided in Figure xx.
+
+```{r}
+knitr::kable(tracker)
+```
+*Table 6: Model metrics for binary logistic regression models*
+
+```{r, message = FALSE, echo = FALSE}
+# ggplot(tracker, aes(x=factor(Model, level=c('Simple', 'Transformed', 'Negative Bimodal', 'Reduced Transformed')), y=Precision)) +
+#   geom_bar(stat = "identity") +
+#   ylab("Precision") +
+#   xlab("Model") +
+#   theme(axis.text.x = element_text(angle = 90))
+
+plt <- melt(tracker[,colnames(tracker)],id.vars = 1)
+
+ggplot(plt, aes(x=factor(Model, level=tracker$Model), y = value)) + 
+  geom_bar(aes(fill = variable),stat = "identity",position = "dodge") +
+  xlab("Model") +
+  ylab("Score") +
+  theme(axis.text.x = element_text(angle = 90))
+```
+
+```{r, echo = FALSE, results = 'hide', fig.keep = 'all', message = FALSE}
+plot(roc(original_test$TenYearCHD,  predict(step_aic_bin_log_orig, original_test, interval = "prediction")), print.auc = TRUE)
+```
+# Discussion and Conclusions
+
+# References
+
+Multicollinearity - Wikipedia: https://en.wikipedia.org/wiki/Multicollinearity#Consequences_of_multicollinearity
+
+Correlation Coefficients - Keith G- Calkins: https://www.andrews.edu/~calkins/math/edrm611/edrm05.htm
+
+A Modern Approach to Regression with R - Simon Sheather
+
+Smoking and Cardiovascular Disease - CDC: https://www.cdc.gov/tobacco/sgr/50th-anniversary/pdfs/fs_smoking_CVD_508.pdf
+
+Heart Health and Aging - NIH: https://www.nia.nih.gov/health/heart-health-and-aging
+
+The relationship between systolic blood pressure and cardiovascular risk--results of the Brisighella Heart Study - National Library of Medicine: https://pubmed.ncbi.nlm.nih.gov/12556653/
+
+ Fasting glucose level and the risk of incident atherosclerotic cardiovascular diseases - Chanshin Park: https://pubmed.ncbi.nlm.nih.gov/23404299/
+ 
+# Appendix
+
+FIGURES AND CODE GO HERE.
