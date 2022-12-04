@@ -202,11 +202,20 @@ I removed the diaBP variable, because it had too high a p-value in the first mod
 ___________
 
 -Krutika
--heartRate: we can probably remove the records over 100 because that is probably indicative of a stroke in-progress
--diaBP/sysBP: we can remove the extreme measurements here as well for similar reasons
-max sys/dia = 160/100
-min sys/dia = 100/65
--tolChol: we can probably remove the records over 500
+
+We conducted research on suspected variables to further examine the authenticity of the data points in the dataset. Using multiple credited medical sources we created plausible ranges for each variable and ommitted extreme or impossible values. Bried discussions and analysis of the process for each variable are below.
+
+**Heart Rate**
+
+An article by Cardiologist Jim Liu of Ohio State University states a normal resting heart rate, measured when the person is not exercising, is between 60 and 100 bpm (beats per minute). The further you move from 100 bpm increases the level of risk on the high sided. On the decreasing side going lower than 60 deviates from the safe levels. The risk levels are assigned by taking into account the heart rate along with the heart rhythem. Taking this into account we removed records with heart rates over a 100.
+
+**Systolic Blood Pressure**
+
+The FDA states that a normal blood pressure reading is 120/80 with 120 being the systolic measurement. If the systolic reading is 130, the blood pressure is considered high at Stage 1, and a reading of 140 is considered Statge 2. A systolic reading of 180 or greater is considered 'hypertensive cricis' and needs immediate medical attention. Taking into account the different stages of risk we declared a range of 100 to 160 an acceptable Systolic Blood Pressure reading.
+
+**Total Cholesterol**
+
+The classification of the levels of total cholesterol are as follows. Less than 200 is optimal, between 200 and 240 is elevated, and greater than 240 is high. Upon further researched that higher levels of total cholesterol, such as 500 are possible. For this reason, we decided to cap our total cholesterol maximum at 500.
 
 ```{r Removing outliers}
 # Removing outlying sysBP values
