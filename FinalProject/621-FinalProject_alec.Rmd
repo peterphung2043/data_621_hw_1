@@ -2,7 +2,12 @@
 title: "621-FinalProject"
 author: "Ahmed Elsaeyed"
 date: '2022-11-30'
-output: 'beamer_presentation'
+output:
+  pdf_document: default
+  df_print: paged
+  fig_caption: yes
+  css: ae_theme.css
+  theme: cosmo
 ---
 
 ```{r setup, include=FALSE, echo = FALSE, warning = FALSE, message = FALSE}
@@ -19,70 +24,49 @@ library(corrplot)
 library(car)
 library(PRROC)
 library(pROC)
-library(kableExtra)
 ```
 
 # Probability of Cardiovascular Disease
 
 This research centers around building a model that predicts the probability of cardiovascular disease given some prior health information. 
 
-# Abstract
+# Abstract- Ahmed
 
-For our final assignment, we will be looking at a dataset of physical characteristics, behavioral characteristics, and health results of patients aged 30-59 in the 1940's in the United States. The data was gathered by the Framingham Heart Study, which is a long-term ongoing study. 5209 subjects were monitored to see if cardiac health can be influenced by lifestyle and environmental factors. It is mainly due to studies like this one, and indeed this one in particular due to its large scope, that we take that conclusion for granted. Before this study, the contributing factors of cardiac health were not clear at all. 
+# Keywords - Ahmed
 
-A result of this study is the 10-year cardiovascular risk score was developed, which is an estimation of how likely it is that someone will have a coronary disease based on the findings of the study. The objective of this project is to build a model to predict this to take their research a step further. 
+# Introduction - Ahmed
 
-# Keywords - Coffy
+# Literature review - Krutika
 
-# Introduction - Coffy
+# Methodology - Alec
 
-# Literature Review
-
-Framingham Study is a study initiated by the United State Public Health Service, that started in 1948 and has been ongoing since. The origin of the study has been closely linked with the cardiovascular health of President Franklin D. Roosevelt and his death from hypertensive heart disease and stroke in 1945. It aims to investigate the epidemiology and factors that are involved in the development of cardiovascular disease. The plan of the study was to track a large cohort of patients over time. The study initially recruited the original cohort of 5209 participants from the town if Framingham, MA. The age group for this study ranges from 30-59 years old. The patients were given questionnaires and exams every 2 years and these questions and exams expanded with time.  This study was continued over three generations of the original participants.
-
-The data collected by the study was used to develop the Framingham Risk Score. The Framingham Risk Score is a sex-specific algorithm that is used to estimate the 10 year cardiovascular risk of an individual. This score gives an estimate probability of a person developing cardiovascular disease within a specified amount of time, the range of which can be from 10 to 30 years.
-
-The study collect a range of 16 variables measurements from the patients in order to create the database. The variables include: Male, Age, Education, Current Smoker, Cigs Per Day, BP Medications, Prevalent Stroke, Prevalent Hypertension, Diabetes, Total Cholesterol, Systolic Blood Pressure, Diastolic Blood Pressure, Heart Rate, Glucose, CHD in 10 years. Most of the variable are categorized by their role is a person's cardiovascular health.
-
-Demographic Risk Factors:
- - Male
- - Age
- - Education
-
-Behavioral Risk Factors:
- - Current Smoker
- - Cigs Per Day
-
-Medical History Factors:
- - BP Medications
- - Prevalent Stroke
- - Prevalent Hypertension
- - Diabetes
-
-Physical Exam Risk:
- - Total Cholesterol
- - Systolic Blood Pressure
- - Diastolic Blood Pressure
- - Heart Rate
- - Glucose
- 
-
-# Methodology
-
-Our methodology for creating a predictive model for future coronary heart disease begins with cleaning and preprocessing our subject dataset. The dataset itself contains 16 fields, one of which is the target: `TenYearCHD`. While the dataset was relatively complete to begin with, we needed to employ multiple operations in order to transform it into a format which subsequent models could interpet. In this vain, we addressed missing values, multicollinearity, outliers, and mis-shaped data using a combination of self-developed functions and transformations. After cleaning / preprocessing, we split the new dataframe into training and testing sets in order to create and test various machine learning models. While developing models, we decided to try multiple approaches, including Binary Logistic Regression, standard and with log transforms, and Step-AIC. After each model, we calculated the relvant performance metrics and stored them in a tracker. Ultimately, our selection criteria was heavily influenced by the models' recall and f1 scores. With medical diagnosis, it's imperative that individuals with an illness be properly classified.
+Our methodology for creating a predictive model for future coronary heart disease begins with cleaning and preprocessing our subject dataset. The dataset itself contains 16 fields, one of which is the target: 'TenYearCHD'. While the dataset was relatively complete to begin with, we needed to employ multiple operations in order to transform it into a format which subsequent models could interpet. In this vain, we addressed missing values, multicollinearity, outliers, and mis-shaped data using a combination of self-developed functions and transformations. After cleaning / preprocessing, we split the new dataframe into training and testing sets in order to create and test various machine learning models. While developing models, we decided to try multiple approaches, including Binary Logistic Regression, standard and with log transforms, and Step-AIC. After each model, we calculated the relvant performance metrics and stored them in a tracker. Ultimately, our selection criteria was heavily influenced by the models' recall and f1 scores. With medical diagnosis, it's imperative that individuals with an illness be properly classified.
 
 ```{r table1, echo=FALSE, message=FALSE, warnings=FALSE, results='asis'}
+tabl <- "
+|Variable Name|Definition|
+|---------------|-------------|
+|Sex|0 = Female; 1 = Male|
+|age|Age at exam time.|
+|education|Education level of respondent|
+|currentSmoker|0 = nonsmoker; 1 = smoker|
+|cigsPerDay|Number of cigarettes smoked per day|
+|BPMeds|Boolean, does respondent take blood pressure medication|
+|prevalentStroke|Boolean, strokes prevalent in family history|
+|prevalentHyp|Boolean, hypertension prevalent in family history|
+|diabetes|Does respondent have diabetes?|
+|totChol|Cholesterol level of respondent|
+|sysBP|systolic blood pressure (mmHg)|
+|diaBP|diastolic blood pressure (mmHg)|
+|BMI|BodyMass Index calculated as: Weight (kg) / Height(meter-squared)|
+|heartRate|Beats/Min (Ventricular)|
+|glucose|total glucose mg/dL|
+|TenYearCHD|Boolean, patient has 10 year risk of future heart disease|
+"
 
-tabledata <- data.frame(matrix(c("Sex","Participant Sex (Male or Female)", "Age", "Age at exam (years) ", "Education", "Attained Education ", "Current Smoker", " Whether or not the patient is a current smoker", "Cigs Per Day", "The number of cigarettes that the person smoked on average in one day ", "BP Meds", "Whether or not the patient was on blood pressure medication", "Prevelant Stroke", "Whether or not the patient had previously had a stroke", "Prevalant Hyp", "Whether or not the patient was hypertensive", "Diabetes", "Whether or not the patient had diabetes", "Tot Chol", "Total cholesterol", "Sys BP", "Systolic blood pressure", "Dia BP", "Diastolic blood pressure", "BMI", "Body Mass Index", "Heart Rate", "Heart rate", "Glucose", "Glucose level", "Ten Year CHD", "10 year risk of coronary heart disease, 'TARGET: 1 = Yes | 2 = No'"), ncol = 2, byrow = TRUE))
-
-# Specify the column names and join
-colnames(tabledata) <- c("Variable", "Description")
-
-# Select style and print table
-kbl(tabledata) %>%
-  kableExtra::kable_minimal(c( "striped"), full_width = F, position = "center")
-
+cat(tabl) # output the table in a format good for HTML/PDF/docx conversion
 ```
+
 
 # Experimentation and Results
 
@@ -124,7 +108,7 @@ heart_history_original <- heart_history %>%
 heart_history_original <- heart_history_original[complete.cases(heart_history_original), ]
 ```
 
-# Data Exploration
+## Data Exploration
 
 Our data set had 4,240 observations and 16 variables. `Sex`, `education`, `currentSmoker`, `BPMeds`, `prevalentStroke`, `prevalentHyp`, `diabetes` and `TenYearCHD` in the analysis carried out in this report are categorical variables, while the rest are numeric. The histograms for the numeric variables revealed that `BMI`, `glucose`, and `totChol` were skewed, and a Box-Cox transformation was undertaken for these variables in order to create new variables that contained the transformed versions of `BMI`, `glucose`, and `totChol`. An analysis into the correlation was done in order to remove variables that were highly correlated with another. Also, the data had several observations with missing data. The methodology that was undertaken to account for these missing values is shown in the "*Missing Values*" section. For comparison purposes, two different datasets were created; one containing the original data with observations with missing values omitted, and another containing manipulated data, where the data went through several transformations as explained in this report.
 ```{r data }
@@ -165,7 +149,7 @@ corrplot(cor(dplyr::select_if(heart_history, is.numeric), use = "na.or.complete"
          tl.cex = 0.5)
 ```
 
-# Multicollinearity Analysis
+### Multicollinearity Analysis
 
 Correlation refers to the strength of a relationship between two or more variables. Problems arise when there significant correlation between two or more predictor variables within a dataset, as this can lead to solutions that are wildly varying and possibly numerically unstable and there is redundancy between predictor variables. One solution to this is to drop one variable that is highly correlated with the other. Calkins explains that we can describe the correlation values between variables in the follwing manner:
 
@@ -181,7 +165,7 @@ The correlations between the variables in the dataset were calculated. What was 
 heart_history <- heart_history %>% dplyr::select(-diaBP)
 ```
 
-# Missing Values
+### Missing Values
 
 The dataset itself contains several observations containing missing values. The percentage of missing data for each of the predictor variables is shown in Table 1.
 
@@ -216,20 +200,28 @@ heart_history  %>%
   theme(axis.title.y=element_blank()) + theme_classic()
 
 ```
-# Data Preparation
+## Data Preparation
 
-# Removing Outlier Values 
+### Removing Outlier Values 
 The boxplots, summaries, and histograms that were generated revealed that some of these heart rates, diastolic, and systolic values as well as total cholesterol do not seem realistic. Imputing the values would not be appropriate because this is medical data and would harm the authenticity of the dataset, and so we have decided to simply remove the bad data. 
 
-We conducted research on suspected variables to further examine the authenticity of the data points in the dataset. Using multiple credited medical sources we created plausible ranges for each variable and omitted extreme or impossible values. Brief discussions and analysis of the process for each variable are below.
+___________
+I removed the diaBP variable, because it had too high a p-value in the first model and it was highly colinear with sysBP
+
+- Peter
+___________
+
+-Krutika
+
+We conducted research on suspected variables to further examine the authenticity of the data points in the dataset. Using multiple credited medical sources we created plausible ranges for each variable and ommitted extreme or impossible values. Bried discussions and analysis of the process for each variable are below.
 
 **Heart Rate**
 
-An article by Cardiologist Jim Liu of Ohio State University states a normal resting heart rate, measured when the person is not exercising, is between 60 and 100 bpm (beats per minute). The further you move from 100 bpm increases the level of risk on the high sided. On the decreasing side going lower than 60 deviates from the safe levels. The risk levels are assigned by taking into account the heart rate along with the heart rhythm. Taking this into account we removed records with heart rates over a 100.
+An article by Cardiologist Jim Liu of Ohio State University states a normal resting heart rate, measured when the person is not exercising, is between 60 and 100 bpm (beats per minute). The further you move from 100 bpm increases the level of risk on the high sided. On the decreasing side going lower than 60 deviates from the safe levels. The risk levels are assigned by taking into account the heart rate along with the heart rhythem. Taking this into account we removed records with heart rates over a 100.
 
 **Systolic Blood Pressure**
 
-The FDA states that a normal blood pressure reading is 120/80 with 120 being the systolic measurement. If the systolic reading is 130, the blood pressure is considered high at Stage 1, and a reading of 140 is considered Stage 2. A systolic reading of 180 or greater is considered 'hypertensive crisis' and needs immediate medical attention. Taking into account the different stages of risk we declared a range of 100 to 160 an acceptable Systolic Blood Pressure reading.
+The FDA states that a normal blood pressure reading is 120/80 with 120 being the systolic measurement. If the systolic reading is 130, the blood pressure is considered high at Stage 1, and a reading of 140 is considered Statge 2. A systolic reading of 180 or greater is considered 'hypertensive cricis' and needs immediate medical attention. Taking into account the different stages of risk we declared a range of 100 to 160 an acceptable Systolic Blood Pressure reading.
 
 **Total Cholesterol**
 
@@ -260,7 +252,7 @@ heart_history %>% dplyr::select(-TenYearCHD) %>%
 
 ```
 
-# Box-Cox Transformation for Skewed Variables
+### Box-Cox Transformation for Skewed Variables
 
 For the variables that exhibited skewness as explained in the "*Data Exploration*" section of this paper, A Modern Approach to Regression with R explains the following:
 
@@ -305,7 +297,7 @@ as.data.frame(transformed_data) %>%
     geom_histogram(bins = 35)
 ```
 
-# Split Data Into Testing and Training
+### Split Data Into Testing and Training
 
 The data was into testing and training subsets such that 70% of it will be used to train, and 30% to test. The first row shows the split for the testing data while the second row shows the split for the training data. Tables 4 and 5 show the distributions of the testing and training data using the original and modified datasets.
 
@@ -357,7 +349,7 @@ modified_test <- subset(heart_history, modified_split == FALSE)
 
 ```
 
-# Building Models
+## Building Models
 
 ```{r accuracy_function, results = FALSE}
 
@@ -463,7 +455,7 @@ update_tracker <- function(tracker, model_name, true_values, predictions, model_
 
 ```
 
-# Binary Logistic Regression Model with Original Data
+### Binary Logistic Regression Model with Original Data
 
 A binary logistic regression model was generated using the original dataset. The observations with missing values were omitted. The final binary logistic regression takes on the following form:
 
@@ -500,7 +492,7 @@ bin_log_orig_predictions_binary <- ifelse(bin_log_orig_predictions > 0.5, 1, 0)
 
 tracker <- update_tracker(tracker, "Bin. Log. w/ Original Data", original_test$TenYearCHD, bin_log_orig_predictions_binary, bin_log_orig, original_test)
 ```
-# Binary Logistic Regression Model with Modified Data
+### Binary Logistic Regression Model with Modified Data
 
 A binary logistic regression model was generated using the modified dataset. The observations with missing values were omitted. The final binary logistic regression model that used modified data takes on the following form:
 
@@ -529,7 +521,7 @@ bin_log_modified_predictions_binary <- ifelse(bin_log_modified_predictions > 0.5
 tracker <- update_tracker(tracker, "Bin. Log. w/ Modified Data", modified_test$TenYearCHD, bin_log_modified_predictions_binary, bin_log_modified, modified_test)
 ```
 
-# Step-AIC Binary Linear Regression Model with Original Data
+### Step-AIC Binary Linear Regression Model with Original Data
 
 Step AIC works by deselecting features that negatively affect the AIC, which is a criterion similar to the R-squared. It selects the model with not only the best AIC score but also a model with less predictors than the full model, since the full model may have predictors that do not contribute or negatively contribute to the model's performance. The direction for the Step AIC algorithm was set to `both`, because this implements both forward and backward elimination in order to decide if a predictor negatively affects the model's performance. The final step-AIC binary logistic regression model that used the original data takes on the following form:
 
@@ -552,7 +544,7 @@ step_aic_bin_log_orig_predictions_binary <- ifelse(step_aic_bin_log_orig_predict
 
 tracker <- update_tracker(tracker, "Step AIC Bin. Log. w/ Original Data", original_test$TenYearCHD, step_aic_bin_log_orig_predictions_binary, step_aic_bin_log_orig, original_test)
 ```
-# Step-AIC Binary Logistic Regression Model with Modified Data
+### Step-AIC Binary Logistic Regression Model with Modified Data
 
 The final step-AIC binary logistic regression model that used the modified data takes on the following form:
 
@@ -576,7 +568,7 @@ step_aic_bin_log_modified_predictions_binary <- ifelse(step_aic_bin_log_modified
 
 tracker <- update_tracker(tracker, "Step AIC Bin. Log. w/ Modified Data", modified_test$TenYearCHD, step_aic_bin_log_modified_predictions_binary, step_aic_bin_log_modified, modified_test)
 ```
-# Model Selection
+## Model Selection
 
 The various metrics that were used to determine the best model are shown in Table 6. Figure XX is a bar chart which plots all of the metrics for all of the models. Table 6 and Figure xx reveal that the accuracy, precision, recall, AUC, and F-score are higher when the original data was used as opposed to the modified. Table 6 revealed that the step-AIC binary logistic regression model using the original data has the second highest AIC, but it also has the highest precision and F-score out of all of the models. Taking all of this into consideration, and the fact that the step-AIC binary logistic regression model using the original data is the most parsimonious out of all of the models, this model is the best performing model out of all of them. The AUC curve for the step-AIC binary logistic regression with original data is provided in Figure xx.
 
@@ -604,43 +596,24 @@ ggplot(plt, aes(x=factor(Model, level=tracker$Model), y = value)) +
 ```{r, echo = FALSE, results = 'hide', fig.keep = 'all', message = FALSE}
 plot(roc(original_test$TenYearCHD,  predict(step_aic_bin_log_orig, original_test, interval = "prediction")), print.auc = TRUE)
 ```
-
 # Discussion and Conclusions
-
-In this paper, 4 different binary logistic regression models were generated in order to predict the 10-year risk of chronic heart disease. The results from the analysis carried out in this report indicate that the transformation of the skewed variables to a normal distribution and the removal of outliers resulted in worse model performance when comparing the metrics to these models and the models that used the original unaltered dataset. With that being said, the AUC's for all of the models were relatively the same. The final model that was selected in order to predict the 10-year risk of chronic heart disease was the best performing and the most parsimonious. We were able to test the validity of this particular model from when the data was split into testing and training datasets.
 
 # References
 
-Center for Drug Evaluation and Research. (2021a, January 21). High Blood Pressure–
-Understanding the Silent Killer. U.S. Food And Drug Administration. 
-https://www.fda.gov/drugs/special-features/high-blood-pressure-understanding-silent-
-killer
+Multicollinearity - Wikipedia: https://en.wikipedia.org/wiki/Multicollinearity#Consequences_of_multicollinearity
 
-Center for Drug Evaluation and Research. (2021b, January 21). High Blood Pressure–
-Understanding the Silent Killer. U.S. Food And Drug Administration. 
-https://www.fda.gov/drugs/special-features/high-blood-pressure-understanding-silent-
-killer
+Correlation Coefficients - Keith G- Calkins: https://www.andrews.edu/~calkins/math/edrm611/edrm05.htm
 
-Framingham Study | Boston Medical Center. (n.d.). https://www.bmc.org/stroke-and-
-cerebrovascular-center/research/framingham-study
+A Modern Approach to Regression with R - Simon Sheather
 
-High cholesterol - Symptoms and causes. (2021, July 20). Mayo Clinic. 
-https://www.mayoclinic.org/diseases-conditions/high-blood-cholesterol/symptoms-
-causes/syc-20350800
+Smoking and Cardiovascular Disease - CDC: https://www.cdc.gov/tobacco/sgr/50th-anniversary/pdfs/fs_smoking_CVD_508.pdf
 
-Liu, J., MD. (2022a, July 19). What’s a dangerous heart rate? What’s a Dangerous Heart 
-Rate? | Ohio State Health & Discovery. Retrieved December 5, 2022, from 
-https://health.osu.edu/health/heart-and-vascular/what-is-dangerous-heart-rate
+Heart Health and Aging - NIH: https://www.nia.nih.gov/health/heart-health-and-aging
 
-NCBI - WWW Error Blocked Diagnostic. (n.d.). 
-https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4159698/
+The relationship between systolic blood pressure and cardiovascular risk--results of the Brisighella Heart Study - National Library of Medicine: https://pubmed.ncbi.nlm.nih.gov/12556653/
 
-NHS website. (2022, July 4). Low blood pressure (hypotension). nhs.uk. 
-https://www.nhs.uk/conditions/low-blood-pressure-hypotension/
-
-Tachycardia: Symptoms, Causes & Treatment. (n.d.). Cleveland Clinic. 
-https://my.clevelandclinic.org/health/diseases/22108-tachycardia
-
+ Fasting glucose level and the risk of incident atherosclerotic cardiovascular diseases - Chanshin Park: https://pubmed.ncbi.nlm.nih.gov/23404299/
+ 
 # Appendix
 
 FIGURES AND CODE GO HERE.
