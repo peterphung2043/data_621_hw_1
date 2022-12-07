@@ -1,0 +1,518 @@
+---
+title: "Probability of Cardiovascular Disease"
+author: "Peter Phung, Ahmed Elsaeyed, Coffy Andrews, Alec McCabe, Krutika Patel"
+date: '2022-12-06'
+output: slidy_presentation
+---
+
+```{r setup, include=FALSE, echo=FALSE, warning=FALSE, message=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r s, include=FALSE, echo = FALSE, warning = FALSE, message = FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, comment = NA)
+
+library(tidyverse)
+library(reshape2)
+library(faraway)
+library(ggplot2)
+library(mice)
+library(caTools)
+library(MASS)
+library(corrplot)
+library(car)
+library(PRROC)
+library(pROC)
+library(kableExtra)
+```
+
+# Probability of Cardiovascular Disease
+
+This project looks at a data set created by the Framingham Heart Study of 1948. 
+
+The data has been used to develop the Framingham Risk Score, an algorithm that estimates the likeliness of a person developing cardiovascular disease in a specified amount of time.
+
+We will be using the data set to train and test predictive models on their ability to estimate the risk of cardiovascular disease.
+
+# Keywords
+
+- Blood Pressure: pressure exerted by the blood upon the walls of the blood vessels and arteries.
+  - Systolic Blood Pressure: the highest arterial blood pressure of a cardiac cycle occurring immediately after the left ventricle of the heart.
+  - Diastolic Blood Pressure: the lowest arterial blood pressure of a cardiac cycle occurring during diastole of the heart.
+- Hypertension: abnormally high blood pressure and especially arterial blood pressure; the system condition accompanying high blood pressure.
+- BMI: a measure of body fat that is the ratio of the weight the body in kilograms to the square of its height in meters.
+- Stroke: sudden impairment or loss of consciousness, sensation, and voluntary motion that is caused by rupture or obstruction (as by a clot) of a blood vessel supplying the brain, and is accompanied by permanent damage of brain tissue.
+- Cholesterol: a steroid alcohol that is present in animal cells and body fluids, regulates membrane fluidity, and functions as a precursor molecule in various metabolic pathways and as a constituent of LDL may cause atherosclerosis
+- Diabetes: any of various abnormal conditions characterized by the secretion and excretion of excessive amounts of urine.
+
+# Introduction
+
+
+Heart disease is the leading cause of death in the United States. It accounts for over one fifth of all deaths per per, with over 600,000 reported deaths in 2020 alone (https://www.cdc.gov/nchs/products/databriefs/db427.htm). To put this further into perspective, roughly one person dies every 34 seconds from cardiovascular disease in the US. It is for these reasons that much effort has been exerted into the study of treatments, medicines, preventative measures and monitoring practices related to heart disease. As it turns out, applied data science techniques and the use of real-world data has proven to be highly effective tools in combating this pressing threat.
+
+Our project objective is to develop a predictive model to be used for the classification of future coronary heart disease in patients, based on select personal attributes and lifestyles. Such a model would help researchers and doctors best help patients, preventing future disease by addressing the current.
+
+Our data is sourced from the Framingham Heart Study, which was initiated by the United States Public Health Service in 1948, under the guidance of President Franklin D. Roosevelt. The study consisted of 5,209 participants with ages between 30-59. Patients were given questionnaires and exams every two years, which expanded over time. The study tracked a large cohort of patients over time and was continued for three generations of the original participants.
+
+# Literature Review
+
+- The Framingham Heart Study was initiated by the United States Public Health Service in 1948.
+
+- The origin is linked to the cardiovascular health of President Franklin D. Roosevelt.
+
+- It investigates the epidemiology and risk factors that contribute to a person's cardiovascular health.
+
+- The study is set in the town of Framingham, MA
+
+- Initial cohort consisted of 5209 participants from the town between the ages 30-59.
+
+- Patients were given questionaires and exams every two years, which expanded over time.
+
+- The study tracked a large cohort of patients over time and was continued for three generations of the original participants.
+
+# Literature Review Cont.
+
+- The study collected a range of 16 variables mesurements from the patients in order to create their database.
+
+- Variables: Male, Age, Education, Current Smoker, Cigs Per Day, BP Medications, Prevalent Stroke, Prevalent Hypertension, Diabetes, Total Cholesterol, Systolic Blood Pressure, Diastolic Blood Pressure, Heart Rate, Glucose, CHD in 10 years
+
+- Most of the variables are categorized by their role in a person's cardiovascular health.
+
+- Demographic Risk Factors:
+  - Male, Age, Education
+
+- Behavioral Risk Factors:
+  - Current Smoker, Cigs Per Day
+
+- Medical History Factors:
+  - BP Medications, Prevalent Stroke, Prevalent Hypertension, Diabetes
+
+- Physical Exam Risk:
+  - Total Cholesterol, Systolic Blood Pressure, Diastolic Blood Pressure, Heart Rate, Glucose
+ 
+# Methodology
+
+- Objective: Create a predictive module for future coronary heart disease
+- Inital data set contains 4240 rows across 16 columns
+- Clean and preprocess data
+  - Transform data for easy input into models
+  - Address missing values, multicollinearity, outliers, and mis-shaped data
+- Split data set into training and testing sets
+- Create tracking system to gather results of each model
+- Attempt multiple predictive models
+- Choose best model based upon selection criteria
+
+# Variables
+
+```{r table1, echo=FALSE, message=FALSE, warnings=FALSE, results='asis'}
+
+tabledata <- data.frame(matrix(c("Sex","Participant Sex (Male or Female)", "Age", "Age at exam (years) ", "Education", "Attained Education ", "Current Smoker", " Whether or not the patient is a current smoker", "Cigs Per Day", "The number of cigarettes that the person smoked on average in one day ", "BP Meds", "Whether or not the patient was on blood pressure medication", "Prevelant Stroke", "Whether or not the patient had previously had a stroke", "Prevalant Hyp", "Whether or not the patient was hypertensive", "Diabetes", "Whether or not the patient had diabetes", "Tot Chol", "Total cholesterol", "Sys BP", "Systolic blood pressure", "Dia BP", "Diastolic blood pressure", "BMI", "Body Mass Index", "Heart Rate", "Heart rate", "Glucose", "Glucose level", "Ten Year CHD", "10 year risk of coronary heart disease, 'TARGET: 1 = Yes | 2 = No'"), ncol = 2, byrow = TRUE))
+
+# Specify the column names and join
+colnames(tabledata) <- c("Variable", "Description")
+
+# Select style and print table
+kbl(tabledata) %>%
+  kableExtra::kable_minimal(c( "striped"), full_width = F, position = "center")
+
+```
+
+```{r data prep}
+#my_git_url <- getURL("https://raw.githubusercontent.com/peterphung2043/data_621_hw_1/main/FinalProject/framingham.csv")
+heart_history <- read.csv("https://raw.githubusercontent.com/peterphung2043/data_621_hw_1/main/FinalProject/framingham.csv")
+heart_history_original <- heart_history
+
+#dim(heart_history)
+```
+
+```{r Convert some columns to factor}
+heart_history <- heart_history %>%
+    mutate(
+    Sex = as.factor(Sex),
+    education = as.factor(education),
+    BPMeds = as.factor(BPMeds),
+    prevalentStroke = as.factor(prevalentStroke),
+    prevalentHyp = as.factor(prevalentHyp),
+    diabetes = as.factor(diabetes),
+    TenYearCHD = as.factor(TenYearCHD),
+    currentSmoker = as.factor(currentSmoker)
+    )
+```
+
+```{r Convert some columns to factor for orignial data}
+heart_history_original <- heart_history %>%
+    mutate(
+    Sex = as.factor(Sex),
+    education = as.factor(education),
+    BPMeds = as.factor(BPMeds),
+    prevalentStroke = as.factor(prevalentStroke),
+    prevalentHyp = as.factor(prevalentHyp),
+    diabetes = as.factor(diabetes),
+    TenYearCHD = as.factor(TenYearCHD),
+    currentSmoker = as.factor(currentSmoker)
+    )
+
+heart_history_original <- heart_history_original[complete.cases(heart_history_original), ]
+```
+
+# Histograms
+
+```{r message = FALSE, echo = FALSE, warning = FALSE, results = 'hide', fig.keep='all'}
+heart_history %>% dplyr::select(-TenYearCHD) %>%
+  keep(is.numeric) %>% 
+  gather() %>% 
+  ggplot(aes(value)) +
+    facet_wrap(~ key, scales = "free") +
+    geom_density(col = 'red') +
+    geom_histogram(aes(y = stat(density)))
+
+```
+
+# Box Plots
+
+```{r message = FALSE, echo = FALSE, warning = FALSE, results = 'hide', fig.keep='all'}
+melt(heart_history) %>%
+  ggplot(aes(x = TenYearCHD, y = value, fill = TenYearCHD)) +
+  geom_boxplot() +
+  facet_wrap(variable~., scales = "free")
+
+melt(heart_history) %>%
+  ggplot(aes(x = Sex, y = value, fill = Sex)) +
+  geom_boxplot() +
+  facet_wrap(variable~., scales = "free")
+
+```
+
+# Correlation
+
+```{r}
+corrplot(cor(dplyr::select_if(heart_history, is.numeric), use = "na.or.complete"),
+         method = 'number',
+         type = 'lower',
+         diag = FALSE,
+         col = 'black',
+         number.cex = 0.75,
+         tl.cex = 0.5)
+```
+
+# Data Cleaning
+
+- Multicollinearity: strength of a relationship between two or more variables, high correlation between two variables lead to possibily unstable solutions.
+  - Variables 'sysBP' and 'diaBP' found to be highly correlated, thus we decided to omit 'diaBP' from the data set.
+
+```{r}
+# Removal of diaBP
+heart_history <- heart_history %>% dplyr::select(-diaBP)
+```  
+
+- Missing Values
+  - The data set contains several observations the contain missing values.
+  - Since this is a medical data set imputing the missing values with something more reasonable would harm the authenticity of the data. 
+  - Thus we have decided to omit all rows that contain missing values.
+
+```{r echo = FALSE, include=FALSE}
+heart_history  %>%
+  summarise_all(list(~is.na(.)))%>%
+  pivot_longer(everything(),
+               names_to = "variables", values_to="missing") %>%
+  count(variables, missing) %>%
+  ggplot(aes(y=variables,x=n,fill=missing))+
+  geom_col()+
+  scale_fill_manual(values=c("skyblue3","gold"))+
+  theme(axis.title.y=element_blank()) + theme_classic()
+
+```
+
+# Data Cleaning Cont. 
+
+- Outliers
+  - Visual summaries of the data revealed that some variables have unrealistic values.
+  - We conducted research and determined reasonable ranges for variables that showed unrealistic outliers.
+  - Only data that came within the bounds of the decided range were kept.
+  
+```{r Removing outliers}
+# Removing outlying sysBP values
+heart_history <- heart_history[heart_history$sysBP < 160 & heart_history$sysBP > 100,]
+
+## Removing outlying diaBP variables
+# heart_history <- heart_history[heart_history$diaBP < 100 & heart_history$diaBP > 65,]
+
+# Removing outlier heart rates
+heart_history <- heart_history[heart_history$heartRate < 100 & heart_history$heartRate > 25,]
+
+# Removing observations with NAs
+heart_history <- heart_history[complete.cases(heart_history), ]
+```
+  
+  
+```{r message = FALSE, echo = FALSE, warning = FALSE, results = 'hide', fig.keep='all'}
+heart_history %>% dplyr::select(-TenYearCHD) %>%
+  keep(is.numeric) %>% 
+  gather() %>% 
+  ggplot(aes(value)) +
+    facet_wrap(~ key, scales = "free") +
+    geom_density(col = 'red') +
+    geom_histogram(aes(y = stat(density)))
+
+```
+
+# Transformations and Data Split
+- For variables that exhibited skewness, we employed Box-Cox transformations.
+  - Box-Cox transformations were performed on the following variables
+    - BMI
+    - glucose
+    - totChol
+- The data set was split into training and testing subsets on a 70%:30% ratio respectively.
+
+```{r replace 0 values in cigs with small value}
+heart_history$cigsPerDay[heart_history$cigsPerDay == 0] <- 1e-6
+```
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+skewed_vars <-   c("BMI", "glucose", "totChol")
+lambdas <- powerTransform(eval(parse(text = paste("cbind(",toString(skewed_vars),")", "~ 1"))), heart_history)
+transformed_data <- bcPower(lambdas$y, coef(lambdas))
+colnames(transformed_data) <- sprintf("tf_%s", skewed_vars)
+heart_history <- cbind(heart_history, transformed_data)
+```
+
+# Building Models
+
+- As we set out to create models we initially created metric functions on which to test the suitability of each model.
+  - Accuracy
+  - Classification Error Rate
+  - F-Score
+  - Precision
+  - Sensitivity
+  - ROC
+
+```{r }
+set.seed(123)
+original_split <- sample.split(heart_history_original$TenYearCHD, SplitRatio = 0.7)
+original_train <-  subset(heart_history_original, original_split == TRUE)
+original_test <- subset(heart_history_original, original_split == FALSE)
+modified_split <- sample.split(heart_history$TenYearCHD, SplitRatio = 0.7)
+modified_train <-  subset(heart_history, modified_split == TRUE)
+modified_test <- subset(heart_history, modified_split == FALSE)
+# table(original_test$TenYearCHD)
+# table(original_train$TenYearCHD)
+# 
+# table(modified_test$TenYearCHD)
+# table(modified_train$TenYearCHD)
+```
+
+```{r accuracy_function, results = FALSE}
+# Accuracy Function
+accuracy <- function(true_values, predictions){
+  TP <- sum(true_values == 1 & predictions == 1)
+  TN <- sum(true_values == 0 & predictions == 0)
+  round((TP + TN)/length(true_values), 4)
+}
+```
+
+```{r error_function, results = FALSE}
+## Classification error rate function
+error <- function(true_values, predictions){
+  FP <- sum(true_values == 0 & predictions == 1)
+  FN <- sum(true_values == 1 & predictions == 0)
+  round((FP + FN)/length(true_values), 4)
+}
+```
+
+```{r fscore_function, results = FALSE}
+## F-score function
+fscore <- function(precision_score, recall_score) {
+  (2* precision_score * recall_score)/(precision_score + recall_score)
+}
+```
+
+```{r precision_function, results = FALSE}
+## Precision function
+##The precision contains 2 values corresponding to the classes 0, and 1. 
+##In binary classification tasks, we will look at the values of the 
+##positive class (1) for reporting metrics.
+precision <- function(true_values, predictions){
+  TP <- sum(true_values == 1 & predictions == 1)
+  FP <- sum(true_values == 0 & predictions == 1)
+  
+  round(TP/(TP+FP), 4)
+}
+```
+
+```{r recall_function, results = FALSE}
+## Sensitivity function
+##The sensitivity/recall contains 2 values corresponding to the classes 0, and 1. 
+##In binary classification tasks, we will look at the values of the positive 
+##class (1) for reporting metrics.
+recall <- function(true_values, predictions){
+  TP <- sum(true_values == 1 & predictions == 1)
+  FN <- sum(true_values == 1 & predictions == 0)
+  
+  round(TP/(TP+FN), 4)
+}
+```
+
+```{r}
+## ROC function for step 10
+ROC <- function(x, y){
+  x <- x[order(y, decreasing = TRUE)]
+  TPR <- cumsum(x) / sum(x)
+  FPR <- cumsum(!x) / sum(!x)
+  df <- data.frame(TPR, FPR, x)
+  
+  FPR_df <- c(diff(df$FPR), 0)
+  TPR_df <- c(diff(df$TPR), 0)
+  area_under_curve <- sum(df$TPR * FPR_df) + sum(TPR_df * FPR_df)/2
+  
+  plot(df$FPR, df$TPR, type = "l",
+       main = "ROC ",
+       xlab = "FPR",
+       ylab = "TPR")
+  abline(a = 0, b = 1)
+  legend("center", legend= c("AUC", round(area_under_curve, 4)))
+  
+}
+```
+
+
+```{r, message = FALSE, echo = FALSE}
+#create data frame with 0 rows and 3 columns
+tracker <- data.frame(matrix(ncol = 8, nrow = 0))
+#provide column names
+colnames(tracker) <- c("Model", "Precision", "Recall", "AIC", "AUC", "F-score", "Accuracy", "Error")
+#create function to update the tracker
+update_tracker <- function(tracker, model_name, true_values, predictions, model_object, df){
+  accuracy = accuracy(true_values, predictions)
+  error = error(true_values, predictions)
+  recall = recall(true_values, predictions)
+  precision = precision(true_values, predictions)
+  aic = model_object$aic
+  auc = as.numeric(str_extract(roc(true_values,  predict(model_object, df, interval = "prediction"))$auc, regex("\\d\\.\\d*")))
+  f_score = fscore(precision, recall)
+  
+  
+  tracker[nrow(tracker) + 1,] <- c(model_name, round(precision, 2), round(recall, 2), round(aic, 2), round(auc, 2), round(f_score, 3), round(accuracy, 2), round(error, 2))
+  return(tracker)
+}
+```
+
+## Models
+  - We created the four following models
+    - Binary Logistic Regression Model with Original Data
+    - Binary Logistic Regression Model with Modified Data
+    - Step-AIC Binary Logistic Regression Model with Original Data
+    - Step-AIC Binary Logistic Regression Model with Modified Data
+
+```{r echo=FALSE}
+bin_log_orig <- glm(TenYearCHD ~ ., data = original_train, family = binomial(link = "logit"))
+#summary(bin_log_orig)
+bin_log_orig_predictions <- predict.glm(bin_log_orig, original_test, type = "response")
+bin_log_orig_predictions_binary <- ifelse(bin_log_orig_predictions > 0.5, 1, 0)
+tracker <- update_tracker(tracker, "Bin. Log. w/ Original Data", original_test$TenYearCHD, bin_log_orig_predictions_binary, bin_log_orig, original_test)
+```
+
+```{r echo=FALSE}
+bin_log_modified <- glm(TenYearCHD ~ ., data = modified_train, family = binomial(link = "logit"))
+#summary(bin_log_modified)
+bin_log_modified_predictions <- predict.glm(bin_log_modified, modified_test, type = "response")
+bin_log_modified_predictions_binary <- ifelse(bin_log_modified_predictions > 0.5, 1, 0)
+tracker <- update_tracker(tracker, "Bin. Log. w/ Modified Data", modified_test$TenYearCHD, bin_log_modified_predictions_binary, bin_log_modified, modified_test)
+```
+
+```{r echo=FALSE}
+step_aic_bin_log_orig <- stepAIC(bin_log_orig, direction = "both", trace = FALSE)
+#summary(step_aic_bin_log_orig)
+step_aic_bin_log_orig_predictions <- predict.glm(step_aic_bin_log_orig, original_test, type = "response")
+step_aic_bin_log_orig_predictions_binary <- ifelse(step_aic_bin_log_orig_predictions > 0.5, 1, 0)
+tracker <- update_tracker(tracker, "Step AIC Bin. Log. w/ Original Data", original_test$TenYearCHD, step_aic_bin_log_orig_predictions_binary, step_aic_bin_log_orig, original_test)
+```
+
+```{r echo=FALSE}
+step_aic_bin_log_modified <- stepAIC(bin_log_modified, direction = "both", trace = FALSE)
+#summary(step_aic_bin_log_modified)
+step_aic_bin_log_modified_predictions <- predict.glm(step_aic_bin_log_modified, modified_test, type = "response")
+step_aic_bin_log_modified_predictions_binary <- ifelse(step_aic_bin_log_modified_predictions > 0.5, 1, 0)
+tracker <- update_tracker(tracker, "Step AIC Bin. Log. w/ Modified Data", modified_test$TenYearCHD, step_aic_bin_log_modified_predictions_binary, step_aic_bin_log_modified, modified_test)
+```
+
+# Model Selection
+
+- The various metrics that were used to determine the model are shown below.
+
+```{r}
+knitr::kable(tracker)
+```
+
+# Model Scores
+```{r, message = FALSE, echo = FALSE}
+# ggplot(tracker, aes(x=factor(Model, level=c('Simple', 'Transformed', 'Negative Bimodal', 'Reduced Transformed')), y=Precision)) +
+#   geom_bar(stat = "identity") +
+#   ylab("Precision") +
+#   xlab("Model") +
+#   theme(axis.text.x = element_text(angle = 90))
+plt <- melt(tracker[,colnames(tracker)],id.vars = 1)
+ggplot(plt, aes(x=factor(Model, level=tracker$Model), y = value)) + 
+  geom_bar(aes(fill = variable),stat = "identity",position = "dodge") +
+  xlab("Model") +
+  ylab("Score") +
+  theme(axis.text.x = element_text(angle = 90))
+```
+
+- The figures reveal that the accuracy, precision, recall, AUC, and F-score are higher when the original data was used as opposed to the modified. 
+
+- The figures reveal that the step-AIC binary logistic regression model using the original data has the second highest AIC, but it also has the highest precision and F-score out of all of the models. 
+
+# ROC Curve
+
+```{r, echo = FALSE, results = 'hide', fig.keep = 'all', message = FALSE}
+plot(roc(original_test$TenYearCHD,  predict(step_aic_bin_log_orig, original_test, interval = "prediction")), print.auc = TRUE)
+```
+
+- Taking all of this into consideration, and the fact that the step-AIC binary logistic regression model using the original data is the most parsimonious out of all of the models, this model is the best performing model out of all of them. The AUC curve for the step-AIC binary logistic regression with original data is provided in the figure.
+
+# Discussion and Conclusion
+
+- In this paper, 4 different binary logistic regression models were generated in order to predict the 10-year risk of chronic heart disease.
+
+- The results from the analysis carried out in this report indicate that the transformation of the skewed variables to a normal distribution and the removal of outliers resulted in worse model performance when comparing the metrics to these models and the models that used the original unaltered data set. With that being said, the AUC's for all of the models were relatively the same. 
+
+- The final model that was selected in order to predict the 10-year risk of chronic heart disease was the best performing and the most parsimonious. 
+
+- We were able to test the validity of this particular model from when the data was split into testing and training data sets.
+
+# Refrences
+
+Center for Drug Evaluation and Research. (2021a, January 21). High Blood Pressure Understanding the Silent Killer. U.S. Food And Drug Administration. 
+https://www.fda.gov/drugs/special-features/high-blood-pressure-understanding-silent-killer
+
+Framingham Study | Boston Medical Center. (n.d.). 
+https://www.bmc.org/stroke-and-cerebrovascular-center/research/framingham-study
+
+High cholesterol - Symptoms and causes. (2021, July 20). Mayo Clinic.
+https://www.mayoclinic.org/diseases-conditions/high-blood-cholesterol/symptoms-causes/syc-20350800
+
+Liu, J., MD. (2022a, July 19). What’s a dangerous heart rate? What’s a Dangerous Heart 
+Rate? | Ohio State Health & Discovery. Retrieved December 5, 2022, from 
+https://health.osu.edu/health/heart-and-vascular/what-is-dangerous-heart-rate
+
+NCBI - WWW Error Blocked Diagnostic. (n.d.). 
+https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4159698/
+
+NHS website. (2022, July 4). Low blood pressure (hypotension). nhs.uk. 
+https://www.nhs.uk/conditions/low-blood-pressure-hypotension/
+
+Tachycardia: Symptoms, Causes & Treatment. (n.d.). Cleveland Clinic. 
+https://my.clevelandclinic.org/health/diseases/22108-tachycardia
+
+# Slide with R Output
+
+```{r cars, echo = TRUE}
+summary(cars)
+```
+
+# Slide with Plot
+
+```{r pressure}
+plot(pressure)
+```
+
